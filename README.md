@@ -12,7 +12,7 @@ Here are some ideas to get you started:
 - 💬 Ask me about ...
 - 📫 How to reach me: ...
 - 😄 Pronouns: ...
-- ⚡ Fun fact: ...
+- ⚡ Fun fact: People think i do not observe when they copy from my repositories <br> 
 
 
 ![Akhil's Github stats](https://github-readme-stats.vercel.app/api?username=akhil14shukla&show_icons=true&theme=radical&hide=prs,contribs)
@@ -21,7 +21,7 @@ Here are some ideas to get you started:
 🔭 I’m currently working on Cryptocurrency Forecasting and Loan Defaulter Prediction <br>
 🌱 I’m currently learning Machine Learning and related fields <br>
 💬 Ask me about ..... dunno, anything, i guess <br>
-⚡ Fun fact: People think I do not observe when they copy from my repositories <br> 
+
 
 [<img align="center" src="https://novatorem-six-cyan.vercel.app/api/spotify" alt="Spotify Now Playing" width="350" />](https://open.spotify.com/user/3xdtw703fk8m81a5hahvjnul9)
 <br>
