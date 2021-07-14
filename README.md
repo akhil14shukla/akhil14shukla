@@ -16,6 +16,7 @@ Here are some ideas to get you started:
 -->
 Currently Listening to <br>
 [<img src="https://novatorem-six-cyan.vercel.app/api/spotify" alt="Spotify Now Playing" width="400" />](https://open.spotify.com/user/3xdtw703fk8m81a5hahvjnul9)
+<br>
 ![Akhil's Github stats](https://github-readme-stats.vercel.app/api?username=akhil14shukla&show_icons=true&theme=radical&hide=prs,contribs)
 <br>
 ![Akhil's Language Distribution](https://github-readme-stats.vercel.app/api/top-langs/?username=akhil14shukla)
