@@ -22,7 +22,7 @@ Here are some ideas to get you started:
 🌱 I’m currently learning Machine Learning and related fields <br>
 💬 Ask me about ..... dunno, anything, i guess <br>
 
-<span style="font-family: 'Bebas Neue'; font-size: 4em;">Currently Rolling </span>
+_**Currently Rolling:**_
 [<img align="center" src="https://novatorem-six-cyan.vercel.app/api/spotify" alt="Spotify Now Playing" width="350" />](https://open.spotify.com/user/3xdtw703fk8m81a5hahvjnul9)
 <br><br>
 <img align="center" src="https://github-readme-stats.vercel.app/api/top-langs/?username=akhil14shukla&theme=radical&layout=compact">
