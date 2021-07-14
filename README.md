@@ -14,4 +14,5 @@ Here are some ideas to get you started:
 - 😄 Pronouns: ...
 - ⚡ Fun fact: ...
 -->
-[<img src="https://novatorem-six-cyan.vercel.app/api/spotify" alt="Spotify Now Playing" width="700" />](https://open.spotify.com/user/3xdtw703fk8m81a5hahvjnul9)
+Currently Listening to <br>
+[<img src="https://novatorem-six-cyan.vercel.app/api/spotify" alt="Spotify Now Playing" width="500" />](https://open.spotify.com/user/3xdtw703fk8m81a5hahvjnul9)
