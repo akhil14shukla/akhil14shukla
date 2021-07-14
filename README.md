@@ -19,3 +19,4 @@ Currently Listening to <br>
 <br>
 ![Akhil's Github stats](https://github-readme-stats.vercel.app/api?username=akhil14shukla&show_icons=true&theme=radical&hide=prs,contribs)
 ![Akhil's Language Distribution](https://github-readme-stats.vercel.app/api/top-langs/?username=akhil14shukla&theme=radical&layout=compact)
+[<img align="center" src="https://github-readme-stats.vercel.app/api?username=akhil14shukla&show_icons=true&theme=radical&hide=prs,contribs">]
