@@ -18,8 +18,8 @@ Here are some ideas to get you started:
 ![Akhil's Github stats](https://github-readme-stats.vercel.app/api?username=akhil14shukla&show_icons=true&theme=radical&hide=prs,contribs)
 ![Akhil's Language Distribution](https://github-readme-stats.vercel.app/api/top-langs/?username=akhil14shukla&theme=radical&layout=compact)
 -->
-🔭 I’m currently working on Cryptocurrency Forecasting and Loan Defaulter Prediction <br>
-🌱 I’m currently learning Machine Learning and related fields <br>
+I'm interested in Machine Learning, and related algorithms. If someone out there want to discuss anything related to this or any other problem, reach out.
+🔭 I’m currently working on Cryptocurrency Forecasting and Loan Defaulter Prediction
 💬 Ask me about ..... dunno, anything, i guess <br><br>
 
 _**Currently Rolling:**_
