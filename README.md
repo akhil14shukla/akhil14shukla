@@ -20,7 +20,7 @@ Here are some ideas to get you started:
 -->
 I'm interested in Machine Learning, and related algorithms. If someone out there want to discuss anything related to this or any other problem, reach out.<br>
 🔭 I’m currently working on Cryptocurrency Forecasting and Loan Defaulter Prediction<br>
-💬 Ask me about ..... dunno, anything, i guess <br><br>
+<br><br>
 
 _**Currently Rolling:**_
 [<img align="center" src="https://novatorem-six-cyan.vercel.app/api/spotify" alt="Spotify Now Playing" width="400" />](https://open.spotify.com/user/3xdtw703fk8m81a5hahvjnul9)
