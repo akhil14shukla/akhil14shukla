@@ -1,4 +1,4 @@
-### Hello there 👋
+### Peace & Chaos
 <!--
 **akhil14shukla/akhil14shukla** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 
@@ -24,7 +24,7 @@ Here are some ideas to get you started:
 💬 If someone out there want to discuss anything related to DSA or ML, please reach out.
 <br><br>
 -->
-Peace & Chaos
+
 
 _**Currently Rolling:**_
 [<img align="center" src="https://novatorem-six-cyan.vercel.app/api/spotify" alt="Spotify Now Playing" width="400" />](https://open.spotify.com/user/3xdtw703fk8m81a5hahvjnul9)
