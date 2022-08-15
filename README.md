@@ -26,10 +26,6 @@ Here are some ideas to get you started:
 -->
 
 
-_**Currently Rolling:**_
-[<img align="center" src="https://novatorem-six-cyan.vercel.app/api/spotify" alt="Spotify Now Playing" width="400" />](https://open.spotify.com/user/3xdtw703fk8m81a5hahvjnul9)
-<br>
-
 <a>
   <img align="center" src="https://github-readme-stats.vercel.app/api/top-langs/?username=akhil14shukla&theme=omni&layout=compact" />
 </a>
@@ -40,3 +36,6 @@ _**Currently Rolling:**_
 <!-- <img align="center" src="https://github-readme-stats.vercel.app/api/top-langs/?username=akhil14shukla&theme=omni&layout=compact">
 <img align="center" src="https://github-readme-stats.vercel.app/api?username=akhil14shukla&show_icons=true&theme=omni&count_private=true"> -->
 
+**Currently Rolling:**_
+[<img align="center" src="https://novatorem-six-cyan.vercel.app/api/spotify" alt="Spotify Now Playing" width="400" />](https://open.spotify.com/user/3xdtw703fk8m81a5hahvjnul9)
+<br>
