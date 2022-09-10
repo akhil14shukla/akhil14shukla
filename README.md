@@ -1,6 +1,6 @@
 ### Hey! I am Akhil
 
-I am currently working on Time-Series Forecasting, my interest also lies in the field of Deep Learning and Classical Machine Learning. Along with ML/DL, I am also trying to focus on good development practices and software engineering.
+I am currently working on Time-Series Forecasting, my interest also lies in Deep Learning and Classical Machine Learning. Along with ML/DL, I am also focusing on good development practices and software engineering to create general purpose libraries.
 
 In my current projects, I am comparing the performance of different models in Time-Series Forecasting and exploring a different way to forecast using Classical Machine Learning models and create a library for the same.
 
@@ -30,16 +30,26 @@ Here are some ideas to get you started:
 💬 If someone out there want to discuss anything related to DSA or ML, please reach out.
 <br><br>e
 -->
-
+#### Stats:
 <div>
 <a href="https://github.com/akhil14shukla">
-  <img align="center" style="margin:0.5rem"  src="https://github-readme-stats.vercel.app/api/top-langs/?username=akhil14shukla&theme=omni" />
+  <img align="center" style="margin:0.5rem" alt="Akhil Shukla | Most Used Languages" src="https://github-readme-stats.vercel.app/api/top-langs/?username=akhil14shukla&theme=omni&exclude_repo=Tabular-Playground,IME672A-Extras,Summer-of-Analytics-IITG-Project,Housing-Price-Prediction,Titanic-Survival-Project,Tic-Tac-Toe,IME672A-Course-Project" />
 </a>
 <a href="https://github.com/akhil14shukla">
-  <img align="center" style="margin:0.5rem"  src="https://github-readme-stats.vercel.app/api?username=akhil14shukla&show_icons=true&theme=omni&count_private=true&hide_rank=true&line_height=33&include_all_commits=true&custom_title=Github+Stats" />
+  <img align="center" style="margin:0.5rem" alt="Akhil Shukla | GitHub Stats" src="https://github-readme-stats.vercel.app/api?username=akhil14shukla&show_icons=true&theme=omni&count_private=true&hide_rank=true&line_height=33&include_all_commits=true&custom_title=Akhil's+Github+Stats" />
 </a>
 </div>
 
+#### Social Media:
+
+<div>
+<a href="https://www.linkedin.com/in/akhil14shukla/">
+  <img align="center" alt="Akhil Shukla | LinkedIn" width="22px" src="https://raw.githubusercontent.com/peterthehan/peterthehan/master/assets/linkedin.svg" style="margin:0.5rem"/>
+</a>
+<a href="https://www.kaggle.com/akhil14shukla">
+<img align="center" alt="Akhil Shukla | Kaggle" src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/kaggle.svg">
+</a>
+</div>
 <!-- <img align="center" src="https://github-readme-stats.vercel.app/api/top-langs/?username=akhil14shukla&theme=omni&layout=compact">
 <img align="center" src="https://github-readme-stats.vercel.app/api?username=akhil14shukla&show_icons=true&theme=omni&count_private=true"> -->
 
