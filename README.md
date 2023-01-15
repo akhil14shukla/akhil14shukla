@@ -33,10 +33,10 @@ Here are some ideas to get you started:
 #### Stats:
 <div>
 <a href="https://github.com/akhil14shukla">
-  <img align="center" style="margin:0.5rem" alt="Akhil Shukla | Most Used Languages" src="https://github-readme-stats.vercel.app/api/top-langs/?username=akhil14shukla&theme=omni&exclude_repo=Tabular-Playground,IME672A-Extras,Summer-of-Analytics-IITG-Project,Housing-Price-Prediction,Titanic-Survival-Project,Tic-Tac-Toe,IME672A-Course-Project" />
+  <img align="center" style="margin:0.5rem" alt="Akhil Shukla | Most Used Languages" src="https://github-readme-stats-pi-ten-67.vercel.app/api/top-langs/?username=akhil14shukla&theme=omni&exclude_repo=Tabular-Playground,IME672A-Extras,Summer-of-Analytics-IITG-Project,Housing-Price-Prediction,Titanic-Survival-Project,Tic-Tac-Toe,IME672A-Course-Project" />
 </a>
 <a href="https://github.com/akhil14shukla">
-  <img align="center" style="margin:0.5rem" alt="Akhil Shukla | GitHub Stats" src="https://github-readme-stats.vercel.app/api?username=akhil14shukla&show_icons=true&theme=omni&count_private=true&hide_rank=true&line_height=33&include_all_commits=true&custom_title=Akhil's+Github+Stats" />
+  <img align="center" style="margin:0.5rem" alt="Akhil Shukla | GitHub Stats" src="https://github-readme-stats-pi-ten-67.vercel.app/api?username=akhil14shukla&show_icons=true&theme=omni&count_private=true&hide_rank=true&line_height=33&include_all_commits=true&custom_title=Akhil's+Github+Stats" />
 </a>
 </div>
 
