@@ -44,10 +44,10 @@ Here are some ideas to get you started:
 
 <div>
 <a href="https://www.linkedin.com/in/akhil14shukla/">
-  <img align="center" alt="Akhil Shukla | LinkedIn" width="22px" src="https://raw.githubusercontent.com/peterthehan/peterthehan/master/assets/linkedin.svg" style="margin:0.5rem"/>
+  <img align="center" alt="Akhil Shukla | LinkedIn" width="22px" src="https://raw.githubusercontent.com/akhil14shukla/akhil14shukla/master/assets/linkedin.svg" style="margin:0.5rem"/>
 </a>
 <a href="https://www.kaggle.com/akhil14shukla">
-<img align="center" alt="Akhil Shukla | Kaggle" src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/kaggle.svg">
+<img align="center" alt="Akhil Shukla | Kaggle" src="https://raw.githubusercontent.com/akhil14shukla/akhil14shukla/master/assets/kaggle.svg">
 </a>
 </div>
 <!-- <img align="center" src="https://github-readme-stats.vercel.app/api/top-langs/?username=akhil14shukla&theme=omni&layout=compact">
