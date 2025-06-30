@@ -1,11 +1,5 @@
 ### Hey! Akhil here..
 
-I'm currently working on Time-Series Forecasting as an Analyst at Walmart.
-
-Also interested in Classical Machine Learning models, Deep Learning and building general-purpose libraries. Let's connect and collaborate!
-
-
-
 <!--
 **akhil14shukla/akhil14shukla** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 
