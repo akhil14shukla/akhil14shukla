@@ -91,3 +91,55 @@ To optimize bandwidth and avoid syncing architecture-specific binaries or massiv
 1. Let Syncthing complete the initial synchronization (the status will change to `idle`).
 2. If the files are synced while the IDE is open, restart the **Antigravity desktop application** on the receiving machine so the backend language server reloads the new summaries index and project mappings.
 3. Your chat history, active tasks, and codebases will now be fully synced and ready to use!
+
+---
+
+## 4. Troubleshooting & Common Issues
+
+### Issue A: Upload and Download Rates are 0 B/s (Idle)
+* **Explanation:** When Syncthing shows `0 B/s` and the folder state is `Idle` (or `Up to Date`), this is the **correct, expected behavior**. It indicates that both machines are fully synchronized and there is no active data to transfer.
+* **Verification:** Try creating a small temporary text file in one of the synced directories. Within 10-15 seconds, you should see the folder scan, transfer rates momentarily spike, and then return to `0 B/s` as it goes back to `Idle`.
+
+### Issue B: "Folder Marker Missing" Error
+* **Symptom:** In the Syncthing Web UI, a folder turns red and displays: `folder marker missing (this indicates potential data loss...)`.
+* **Explanation:** Syncthing creates an empty folder named `.stfolder` inside every sync directory as a safety check to ensure the directory is still mounted. If it gets deleted, Syncthing stops syncing the folder entirely to prevent accidental data loss.
+* **Fix:** Manually recreate the missing directory on the machine reporting the error.
+  ```bash
+  mkdir -p /path/to/synced-folder/.stfolder
+  ```
+  Once created, trigger a rescan or restart Syncthing to clear the error.
+
+### Issue C: macOS Service Startup or Bootstrap Errors
+* **Symptom:** Running `brew services start syncthing` or `brew services restart syncthing` fails with: `Bootstrap failed: 5: Input/output error` or status remains as `other`.
+* **Fix:** The service is already registered under launchd but might be stuck. You can force-restart it using macOS's built-in `launchctl` command (replace `501` with your user ID, which you can find by running `id -u`):
+  ```bash
+  launchctl kickstart -kp gui/501/homebrew.mxcl.syncthing
+  ```
+
+---
+
+## 5. Preventative Practices
+
+### A. Lock the `.stfolder` Safety Directory (Recommended)
+To prevent build tools, cleanup scripts, or commands like `git clean -fdx` from deleting the hidden `.stfolder` directory, lock it with the macOS **immutable flag** (`uchg`):
+```bash
+chflags uchg /path/to/synced-folder/.stfolder
+```
+*Note: If you ever need to delete or move this folder in the future, you can unlock it first by running:*
+```bash
+chflags nouchg /path/to/synced-folder/.stfolder
+```
+
+### B. Add `.stfolder` to Git Ignore Rules
+For any synced folder that is a Git repository, add `.stfolder` to your local `.gitignore` or global `~/.gitignore_global`:
+```
+.stfolder/
+```
+
+### C. Create a Shell Alias for Service Recovery
+To quickly revive a stuck or frozen Syncthing launchd daemon on macOS, add this helper alias to your shell profile (`~/.zshrc` or `~/.bash_profile`):
+```bash
+alias recovery-shell="launchctl kickstart -kp gui/\$(id -u)/homebrew.mxcl.syncthing"
+```
+Now, simply typing `recovery-shell` will instantly force-revive the background service.
+
