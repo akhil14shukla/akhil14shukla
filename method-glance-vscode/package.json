@@ -31,8 +31,23 @@
         "command": "methodGlance.unfold",
         "title": "Method Glance: Unfold Everything",
         "category": "Method Glance"
+      },
+      {
+        "command": "methodGlance.showMap",
+        "title": "Method Glance: Show Glance Map",
+        "category": "Method Glance",
+        "icon": "$(type-hierarchy)"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "methodGlance.showMap",
+          "group": "navigation",
+          "when": "editorLangId =~ /^(python|javascript|javascriptreact|typescript|typescriptreact|java|c|cpp|csharp|go|rust|php|kotlin|scala|swift|dart|groovy)$/"
+        }
+      ]
+    },
     "keybindings": [
       {
         "command": "methodGlance.fold",
@@ -44,6 +59,12 @@
         "command": "methodGlance.unfold",
         "key": "ctrl+k ctrl+u",
         "mac": "cmd+k cmd+u",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "methodGlance.showMap",
+        "key": "ctrl+k ctrl+m",
+        "mac": "cmd+k cmd+m",
         "when": "editorTextFocus"
       }
     ],
@@ -66,7 +87,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "tsc -p ./ && node ./out/test/run.js && node ./out/test/semantic.js",
+    "test": "tsc -p ./ && node ./out/test/run.js && node ./out/test/semantic.js && node ./out/test/layout.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {

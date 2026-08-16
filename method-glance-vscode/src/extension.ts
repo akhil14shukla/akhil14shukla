@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { familyFor, supportedLanguageIds } from "./languages";
 import { GlanceHoverProvider } from "./hover";
 import { MethodNode } from "./model";
+import { GlanceMapPanel } from "./panel";
 import { getModel, invalidate, resolveCalls } from "./semantics";
 
 /**
@@ -111,6 +112,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("methodGlance.unfold", () => {
       void vscode.commands.executeCommand("editor.unfoldAll");
+    }),
+    vscode.commands.registerCommand("methodGlance.showMap", () => {
+      GlanceMapPanel.show(context);
     })
   );
 
