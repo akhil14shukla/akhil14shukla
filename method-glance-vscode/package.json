@@ -54,6 +54,11 @@
           "type": "boolean",
           "default": false,
           "description": "Automatically fold to method signatures and docstrings when a supported file becomes active."
+        },
+        "methodGlance.showCallCarets": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mark methods that call a sibling with a gutter caret. Requires a language server that supports call hierarchy."
         }
       }
     }
@@ -61,7 +66,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "tsc -p ./ && node ./out/test/run.js",
+    "test": "tsc -p ./ && node ./out/test/run.js && node ./out/test/semantic.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {

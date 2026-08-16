@@ -4,12 +4,12 @@ const DEF_RE = /^(\s*)(async\s+)?def\s/;
 
 /** Leading-whitespace width, treating a tab as one column (indent only needs
  * to be compared for relative depth, and Python forbids mixing anyway). */
-function indentWidth(line: string): number {
+export function indentWidth(line: string): number {
   const m = line.match(/^[ \t]*/);
   return m ? m[0].length : 0;
 }
 
-function isBlank(line: string): boolean {
+export function isBlank(line: string): boolean {
   return line.trim().length === 0;
 }
 
@@ -19,7 +19,7 @@ function isBlank(line: string): boolean {
  * signatures, which rarely contain `#` inside strings, but it does respect
  * quotes it can see on the line.
  */
-function codePortion(line: string): string {
+export function codePortion(line: string): string {
   let inStr: string | null = null;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
@@ -74,7 +74,7 @@ function bracketDelta(line: string): number {
  * with `:` at bracket depth 0). Returns the signature's last line index, or -1
  * if the signature never closes within the document.
  */
-function signatureEnd(lines: string[], defLine: number): number {
+export function signatureEnd(lines: string[], defLine: number): number {
   let depth = 0;
   for (let i = defLine; i < lines.length; i++) {
     depth += bracketDelta(lines[i]);
@@ -92,7 +92,7 @@ function signatureEnd(lines: string[], defLine: number): number {
  * Given the first non-blank body line, if it opens a docstring return the index
  * of the line on which that docstring closes. Otherwise return -1.
  */
-function docstringEnd(lines: string[], firstBodyLine: number): number {
+export function docstringEnd(lines: string[], firstBodyLine: number): number {
   const stripped = lines[firstBodyLine].trim();
   // Optional string prefixes: r, b, u, f and combinations, then a triple quote.
   const m = stripped.match(/^[rRbBuUfF]{0,2}("""|''')/);

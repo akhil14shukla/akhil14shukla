@@ -56,6 +56,10 @@ unfolds first and then re-folds.
 | Setting | Default | Description |
 | --- | --- | --- |
 | `methodGlance.foldOnOpen` | `false` | Automatically fold when a supported file becomes the active editor |
+| `methodGlance.showCallCarets` | `true` | Mark methods that call a sibling with a gutter caret |
+
+Hovering a folded method's signature shows its docstring plus what it calls and
+who calls it.
 
 ## Language support
 
@@ -86,11 +90,22 @@ methods you are trying to glance at.
 
 ## How it works
 
-The extension registers a `FoldingRangeProvider` that contributes one folding
-range per method, then the fold command asks the editor to collapse at each of
-those start lines. The ranges are additive: your normal folding controls keep
-working exactly as before, and nothing is ever modified in your file — this is
-purely a view operation.
+Structure comes from **your language server** — Pylance, tsserver, gopls,
+rust-analyzer — through VS Code's provider commands, not from parsing text.
+`executeDocumentSymbolProvider` gives exact method ranges; call hierarchy gives
+type-resolved call edges that handle inheritance, `super()`, aliases and imports.
+The bundled parsers remain as a fallback for files with no language extension
+installed, or a server that has not finished starting.
+
+Because structure is read from symbols, languages with a symbol provider work
+even if they are not in the list above.
+
+Folding ranges are additive: your normal folding controls keep working exactly as
+before, and nothing is ever modified in your file — this is purely a view
+operation.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the data flow, the cost
+model behind lazy call resolution, and the roadmap for diagram views.
 
 ## Development
 
