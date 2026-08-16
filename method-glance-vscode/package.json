@@ -1,0 +1,72 @@
+{
+  "name": "method-glance",
+  "displayName": "Method Glance",
+  "description": "Fold everything except method signatures and their docstrings to quickly glance over what a file's methods do.",
+  "version": "0.1.0",
+  "publisher": "akhil14shukla",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "fold",
+    "folding",
+    "docstring",
+    "outline",
+    "python"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "methodGlance.fold",
+        "title": "Method Glance: Fold to Method Signatures & Docstrings",
+        "category": "Method Glance"
+      },
+      {
+        "command": "methodGlance.unfold",
+        "title": "Method Glance: Unfold Everything",
+        "category": "Method Glance"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "methodGlance.fold",
+        "key": "ctrl+k ctrl+g",
+        "mac": "cmd+k cmd+g",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "methodGlance.unfold",
+        "key": "ctrl+k ctrl+u",
+        "mac": "cmd+k cmd+u",
+        "when": "editorTextFocus"
+      }
+    ],
+    "configuration": {
+      "title": "Method Glance",
+      "properties": {
+        "methodGlance.foldOnOpen": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically fold to method signatures and docstrings when a supported file becomes active."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "tsc -p ./ && node ./out/test/run.js",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.4.0"
+  }
+}
