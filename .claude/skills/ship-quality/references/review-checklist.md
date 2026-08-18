@@ -1,10 +1,52 @@
 # Deep review checklist
 
+Read this for the deep review pass on a high-stakes change — anything touching
+money, authentication, personal data, a public API, a migration, or a hot path.
+
 The gate in `SKILL.md` covers every change. This is the longer pass for changes
 where the stakes justify it: anything touching money, authentication, personal
 data, a public API, a migration, or a hot path.
 
 Work top-down. Design problems make the rest irrelevant, so they come first.
+
+## Read your own diff as a stranger
+
+Look at the actual diff, not your memory of what you wrote. `git diff` and
+`git diff --staged`, file by file. You are looking for the things that are
+invisible while writing and obvious while reading.
+
+```bash
+git diff                      # unstaged
+git diff --staged             # staged
+git status                    # anything accidentally added, anything forgotten
+git diff --stat               # is the change the size you think it is?
+```
+
+Ask, in this order — design first, because a design problem is not fixable by
+polishing:
+
+- **Does this change belong here?** Right layer, right module, consistent with
+  how the codebase already does this?
+- **Does it do what was asked, all of it?** Re-read the original request. It is
+  common to solve 80% and to have stopped noticing the other 20%.
+- **Is there anything in the diff I did not mean to include?** Debug prints,
+  commented-out code, a stray file, a formatting change to an unrelated file, a
+  version bump you did not intend, a `.env`.
+- **What happens on the unhappy path?** Empty input, missing key, zero, a
+  negative number, a value ten times bigger than expected, the dependency being
+  down, the same request arriving twice.
+- **Does every error path either handle the failure or propagate it with
+  context?** No silent `catch {}`, no ignored return value without a stated
+  reason.
+- **Does anything leak on the error path** — a file handle, a connection, a
+  transaction, a lock?
+- **Would a stranger understand why this code exists** from the names and the
+  comments?
+
+Fix what you find *before* running the tests, not after — the tests will not
+tell you about any of it.
+
+---
 
 ## Design
 

@@ -5,6 +5,8 @@ concludes the restructure was a mistake, even when the target tree was right.
 The whole craft is in making the change reviewable and reversible at every step.
 
 ## Contents
+
+- [The procedure in short](#the-procedure-in-short)
 - [Decide whether it is worth it](#decide-whether-it-is-worth-it)
 - [Step 1: inventory](#step-1-inventory)
 - [Step 2: agree the target tree](#step-2-agree-the-target-tree)
@@ -14,6 +16,39 @@ The whole craft is in making the change reviewable and reversible at every step.
 - [Breaking an import cycle](#breaking-an-import-cycle)
 - [Untangling a pile of scripts](#untangling-a-pile-of-scripts)
 - [What not to do](#what-not-to-do)
+
+## The procedure in short
+
+The user asking for this usually has working code in a bad tree. Moving it is
+worth doing — but a restructure that breaks the build destroys trust in the
+whole idea, so do it as a sequence of boring, verifiable steps.
+
+**Read `references/restructuring.md` before starting.** The short version:
+
+1. **Inventory first.** List every file and what it actually does. Note the
+   entry points and anything that is dead — deleting dead code before moving it
+   is the cheapest win available.
+2. **Write down the target tree and get agreement on it** before moving
+   anything. Show it to the user as a tree diagram.
+3. **Establish a safety net.** If there are no tests, add a few
+   characterisation tests over the main paths first. Without them you are not
+   restructuring, you are rewriting blind.
+4. **Move mechanically, in small commits.** `git mv` (history is preserved and
+   the diff shows a rename), one coherent group per commit, imports fixed, tests
+   green after each. Never mix a move with a behaviour change — a reviewer must
+   be able to trust that a move is only a move.
+5. **Fix imports with the toolchain**, not by hand: your IDE's move-refactor,
+   `ruff check --fix`, `gofmt -r`, `ts-morph`. Hand-editing imports across 80
+   files is where the typos come from.
+6. **Delete the compatibility shims** you left behind, in a final commit, once
+   nothing references them.
+
+Say clearly what you are doing and why: "these 30 scripts are one pipeline, so
+I am grouping them into `src/pipeline/{ingest,transform,publish}` and adding a
+single entry point; behaviour is unchanged and the tests prove it." A silent
+large-scale move is unreviewable.
+
+---
 
 ## Decide whether it is worth it
 

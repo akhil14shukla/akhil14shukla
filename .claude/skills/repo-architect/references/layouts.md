@@ -5,6 +5,7 @@ the comments explain *why* each piece is where it is, so you can make informed
 deviations rather than cargo-culting.
 
 ## Contents
+
 - [Python: library](#python-library)
 - [Python: CLI tool](#python-cli-tool)
 - [Python: web service](#python-web-service)
@@ -15,8 +16,6 @@ deviations rather than cargo-culting.
 - [Go](#go)
 - [Rust](#rust)
 - [Java / Kotlin](#java--kotlin)
-
----
 
 ## Python: library
 

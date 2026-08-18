@@ -1,5 +1,9 @@
 # Advanced testing techniques
 
+Read this when a plain example-based test is a poor fit — property-based,
+snapshot, or contract tests; async and concurrent code; real databases; or
+characterising legacy code before changing it.
+
 Reach for these when the plain example-based test is a poor fit. Each has a
 narrow sweet spot; using them everywhere makes a suite slower and harder to read.
 

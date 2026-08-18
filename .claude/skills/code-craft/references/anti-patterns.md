@@ -1,5 +1,8 @@
 # Anti-pattern catalogue: before and after
 
+Read this when a reviewer says the code is hard to follow and you are not sure
+why, or when you recognise one of these shapes in something you just wrote.
+
 Each entry is a construct that reliably makes code hard to read or change, why
 it hurts, and the version to write instead. When a reviewer says "this is hard
 to follow" and you are not sure why, find the shape here.

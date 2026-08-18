@@ -1,8 +1,47 @@
 # Errors, boundaries, and failure at the edges
 
+Read this when writing error handling, validating input at a system boundary,
+or adding retries, timeouts, or idempotency to a network call.
+
 Most production incidents are not "the logic was wrong". They are "something
 outside the process behaved differently than assumed, and nothing handled it."
 This file covers the patterns for that.
+
+## The standing rules
+
+The reader at 2am is almost always chasing an error. What you write here
+determines whether they find the cause in one minute or one hour.
+
+- **Distinguish expected from exceptional.** "User not found" during a lookup
+  is an ordinary outcome — model it in the return type (`Option`, `Result`,
+  null with a documented contract, a sentinel error). "Database connection
+  refused" is exceptional — throw/return an error and let it travel. Using
+  exceptions for ordinary control flow hides real failures in the noise.
+- **Fail fast at the boundary, not deep inside.** Validate input where it
+  enters the system — the HTTP handler, the CLI parser, the queue consumer —
+  and pass validated types inward. Then internal functions do not each need
+  defensive checks, and a bad value cannot travel three layers before
+  surfacing somewhere unrelated.
+- **Every error message answers three questions**: what operation failed, on
+  what input, and what the caller should do. `"invalid config"` fails all
+  three. `"config: retry_limit must be >= 0, got -1 (config.yaml line 14)"`
+  answers all three. Include the offending value — but never secrets, tokens,
+  full credit-card numbers, or personal data.
+- **Add context as the error travels up; do not replace it.** Wrap with the
+  operation you were attempting and preserve the cause (`%w` in Go,
+  `raise ... from e` in Python, `cause` in JS `Error`, exception chaining in
+  Java). A stack of `"charge order 55: fetch customer: connection refused"`
+  locates the bug immediately; a bare `"connection refused"` does not.
+- **Never catch broadly to keep going.** `catch (e) {}` and `except Exception:
+  pass` convert a loud bug into a silent wrong answer, which is strictly worse.
+  Catch the specific type you can actually handle.
+- **Do not log and rethrow.** You get the same failure printed five times and
+  no clearer picture. Log where you handle it; wrap and return everywhere else.
+- **Clean up deterministically.** Use the language's scoped mechanism —
+  `defer`, `try-with-resources`, `using`, RAII, `finally` — not manual cleanup
+  on each return path, because someone will add a sixth return and miss it.
+
+---
 
 ## The three-layer error model
 

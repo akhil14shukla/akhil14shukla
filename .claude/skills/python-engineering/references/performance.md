@@ -2,6 +2,7 @@
 
 ## Contents
 
+- [The model in one page](#the-model-in-one-page)
 - [The workflow](#the-workflow)
 - [Cost of built-in operations](#cost-of-built-in-operations)
 - [Choosing the data structure](#choosing-the-data-structure)
@@ -12,6 +13,69 @@
 - [Micro-optimisations that are real](#micro-optimisations-that-are-real)
 - [Concurrency and the GIL](#concurrency-and-the-gil)
 - [Benchmarking honestly](#benchmarking-honestly)
+
+## The model in one page
+
+Guessing about Python performance is unusually unreliable, because the cost is
+concentrated in places that do not look expensive. The reliable model:
+
+**Every interpreted operation costs; C-implemented operations over many items
+cost once.** So the wins, in the order they matter:
+
+1. **Pick the right data structure.** Membership testing in a `list` is O(n);
+   in a `set` or `dict` it is O(1). Turning a nested loop over two lists into a
+   set lookup takes a 60-second job to under a second, and no micro-optimisation
+   comes close.
+2. **Do not do the work twice.** Hoist loop-invariant computation out of the
+   loop. Cache pure, expensive, repeatedly-called functions with
+   `functools.lru_cache`/`@cache`. Compute once, reuse.
+3. **Push the loop into C.** `sum()`, `min()`, `max()`, `any()`, `sorted()`,
+   `str.join`, `list.sort`, `bytes.translate`, `collections.Counter`,
+   `itertools`, and numpy/polars operations run their iteration in C. A
+   hand-written Python loop doing the same thing is typically several times
+   slower.
+4. **Batch your I/O.** One query returning 1000 rows beats 1000 queries by
+   orders of magnitude — this (the N+1 pattern) is the most common real-world
+   Python performance bug, and it is invisible in a profiler that only shows
+   CPU. Same for HTTP calls, file reads, and log writes.
+5. **Stream instead of materialising.** Generators and `itertools` keep memory
+   flat; `list(f.readlines())` on a large file is how a process gets OOM-killed.
+6. Only then micro-optimise: local-variable binding in hot loops, `__slots__`,
+   avoiding attribute lookups in the innermost loop, `array`/`memoryview`.
+
+Three specifics that come up constantly:
+
+```py
+# String building: O(n²) vs O(n). At 100k items this is seconds vs milliseconds,
+# because each += copies the whole accumulated string.
+out = ""
+for s in parts: out += s          # slow
+out = "".join(parts)              # fast
+
+# Membership: O(n) per check vs O(1).
+if user_id in banned_list:  ...   # list  → linear scan every call
+banned = set(banned_ids)          # build once
+if user_id in banned:  ...        # set   → constant time
+
+# Repeated lookup in a hot loop: bind once outside it.
+append = results.append            # avoids an attribute lookup per iteration
+for x in data: append(transform(x))
+```
+
+**Measure before you optimise, and measure after.** `cProfile` for where the
+time goes, `timeit` for comparing two implementations, `pyinstrument` or
+`py-spy` for a readable call-tree of a real workload, `tracemalloc` or
+`memray` for memory. Optimising an unmeasured guess usually makes the code
+uglier and no faster — and reviewers will not be able to tell whether the
+complexity bought anything. When you do optimise, leave a comment with the
+number you measured.
+
+`references/performance.md` has the full treatment: complexity of every
+built-in operation, `lru_cache` pitfalls, numpy/polars vectorisation, when the
+free-threaded 3.14 build actually helps, and how to benchmark honestly.
+`perf-engineering` covers the language-agnostic methodology.
+
+---
 
 ## The workflow
 

@@ -1,8 +1,62 @@
 # Python idioms: before and after
 
+Read this when you are unsure of the idiomatic form, or rewriting code that
+works but reads clumsily.
+
 Each rewrite below is one a reviewer would ask for. The "after" is not shorter
 for its own sake — it is either clearer, safer, or measurably faster, and the
 note says which.
+
+## The idioms that carry their weight
+
+These are the ones that change how the code reads, not trivia.
+
+- **Comprehensions for transformation; a loop when there is a side effect.**
+  A comprehension with an `if` and a nested `for` and a ternary is worse than
+  the loop it replaced. One `for`, optionally one `if` — past that, write the
+  loop.
+- **Generators for anything you stream.** `yield` keeps memory flat over a
+  100M-row file and lets the caller stop early. Returning a list forces the
+  whole thing into memory whether or not the caller needs it.
+- **`pathlib`, not `os.path`.** `path.read_text()`, `path / "sub" / "file.txt"`,
+  `path.exists()` — shorter, cross-platform, and typed.
+- **Context managers for every resource**, and `contextlib.contextmanager` when
+  you need your own. If you write `f = open(...)` without `with`, the file stays
+  open until GC on any error path.
+- **Unpack instead of indexing**: `for i, item in enumerate(xs)`,
+  `for a, b in zip(xs, ys, strict=True)`. `strict=True` (3.10+) catches the
+  silently-truncated-zip bug, which is otherwise invisible.
+- **EAFP over LBYL** where a race is possible: `try: f = open(p)` beats
+  `if p.exists(): open(p)`, because the file can vanish between the two lines.
+- **`match` for dispatching on shape**, not as a switch replacement — its value
+  is destructuring (`case {"type": "order", "id": int(id)}`).
+- **f-strings everywhere except logging** (see below), and `f"{value!r}"` in
+  error messages so you can see quoting and whitespace.
+- **`dict.get(k, default)` / `collections.defaultdict` / `dict.setdefault`**
+  instead of `if k in d: ... else: ...`.
+- **Keyword-only arguments** for anything a caller could get in the wrong order:
+  put `*` in the signature. `resize(img, 100, 200)` is a coin flip;
+  `resize(img, width=100, height=200)` is not.
+
+The mistakes worth naming explicitly, because they are silent:
+
+- **Mutable default arguments.** `def f(items=[])` shares one list across every
+  call, forever. Use `None` and create inside.
+- **`except:` or `except Exception:` around a whole block.** It catches your own
+  typos and turns them into wrong answers.
+- **Mutating a list while iterating over it** — iterate over a copy or build a
+  new list.
+- **`==` on floats.** Use `math.isclose`, or integers/`Decimal` for money.
+- **`from module import *`** — the reader cannot tell where a name came from.
+- **Module-level side effects** (opening connections, reading env, mutating
+  globals at import). Import order becomes significant and tests break.
+- **`assert` for validation.** `python -O` removes asserts. Use them for
+  invariants in tests and internal sanity checks only; raise real exceptions for
+  input validation.
+
+A fuller before/after catalogue is in `references/idioms.md`.
+
+---
 
 ## Mutable default argument
 

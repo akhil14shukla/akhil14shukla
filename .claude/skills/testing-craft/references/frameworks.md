@@ -4,13 +4,12 @@ Read the section for your stack. Each covers the features that change how tests
 read, plus the specific traps in that framework.
 
 ## Contents
+
 - [pytest (Python)](#pytest-python)
 - [vitest / jest (TypeScript)](#vitest--jest-typescript)
 - [go test](#go-test)
 - [cargo test (Rust)](#cargo-test-rust)
 - [JUnit 5 (Java/Kotlin)](#junit-5-javakotlin)
-
----
 
 ## pytest (Python)
 

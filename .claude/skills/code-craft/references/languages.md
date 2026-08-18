@@ -15,8 +15,6 @@ the footguns that cause real production bugs in that language.
 - [Shell (bash)](#shell-bash)
 - [SQL](#sql)
 
----
-
 ## TypeScript / JavaScript
 
 **Use TypeScript, in strict mode.** `"strict": true` plus

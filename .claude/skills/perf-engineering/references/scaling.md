@@ -4,6 +4,7 @@ When one process tuned well is not enough. Each pattern below buys something and
 costs something — the cost is usually a new failure mode, so it is listed too.
 
 ## Contents
+
 - [Scale up before scaling out](#scale-up-before-scaling-out)
 - [Read replicas](#read-replicas)
 - [Queues and background work](#queues-and-background-work)

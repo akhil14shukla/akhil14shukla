@@ -1,5 +1,8 @@
 # The four documentation modes, in depth
 
+Read this when organising `docs/`, or when you cannot tell which kind of
+document you are writing and it is coming out as two things at once.
+
 Most unsatisfying documentation is two of these fused into one document. The
 tutorial that stops to discuss trade-offs loses the beginner; the reference page
 that tells a story cannot be scanned. Splitting by the reader's *situation* is
@@ -11,6 +14,44 @@ Two axes place the four modes:
 |---|---|---|
 | **Serving study** (learning) | Tutorial | Explanation |
 | **Serving work** (a task at hand) | How-to guide | Reference |
+
+## Choosing the mode
+
+The Diátaxis framework observes that documentation serves four distinct needs,
+and that most bad documentation is two of them fused into one document that
+serves neither. Split by *what the reader is doing*:
+
+| Kind | Reader's situation | Written as | Example |
+|---|---|---|---|
+| **Tutorial** | Learning; no context yet | A lesson you guarantee works end to end | "Build your first pipeline" |
+| **How-to** | Has a specific goal, already competent | A recipe, assumes background | "How to add a new data source" |
+| **Reference** | Needs a precise fact, fast | Dry, complete, structured, scannable | API and CLI reference |
+| **Explanation** | Wants to understand *why* | Discursive prose, discusses alternatives | "Why we chose event sourcing" |
+
+The practical rules:
+
+- **A tutorial must never explain trade-offs** — it must work, start to finish,
+  with no decisions for the reader to make. A learner who has to choose is stuck.
+- **Reference must never teach.** It is looked up, not read. Be complete and
+  consistent; every entry has the same shape.
+- **How-to guides assume competence.** They answer "how do I X", not "what is X".
+- **Explanation is where the reasoning goes** — the alternatives you rejected,
+  the constraints, the history. It is what stops the next person re-litigating a
+  settled decision.
+
+```
+docs/
+├── tutorials/       01-getting-started.md
+├── how-to/          add-a-data-source.md, deploy-to-staging.md
+├── reference/       api.md, cli.md, configuration.md
+├── explanation/     architecture.md, why-event-sourcing.md
+└── adr/             0001-use-postgres.md
+```
+
+More detail and the diagnostic for a document that is trying to be two things at
+once is in `references/diataxis.md`.
+
+---
 
 ## Tutorial — learning-oriented
 

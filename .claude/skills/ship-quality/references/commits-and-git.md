@@ -5,6 +5,9 @@ change itself. A year from now, someone bisecting a regression will read your
 commit message and it will be the only explanation that exists.
 
 ## Contents
+
+- [Committing](#committing)
+- [Pull request description](#pull-request-description)
 - [Conventional Commits in full](#conventional-commits-in-full)
 - [Writing the body](#writing-the-body)
 - [Splitting a messy working tree](#splitting-a-messy-working-tree)
@@ -12,6 +15,86 @@ commit message and it will be the only explanation that exists.
 - [Rebase or merge](#rebase-or-merge)
 - [Branches](#branches)
 - [Things never to commit](#things-never-to-commit)
+
+## Committing
+
+**One logical change per commit.** A commit that adds a feature, reformats two
+files, and renames a variable cannot be reviewed, reverted, or bisected. Split
+it: `git add -p` stages by hunk.
+
+Refactors and behaviour changes go in **separate commits** — that is what lets a
+reviewer trust "no behaviour change" without reading every moved line.
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<optional scope>): <imperative summary, ~50 chars, no full stop>
+
+Why this change was needed, and anything a reader would otherwise have to
+reconstruct: the constraint that forced this approach, the alternative that
+did not work, the measurement that justified an optimisation. Wrap at 72.
+
+Refs: #412
+```
+
+Types: `feat` (new capability, MINOR), `fix` (bug, PATCH), `refactor`, `perf`,
+`test`, `docs`, `build`, `ci`, `chore`. A breaking change is `feat!:` or a
+`BREAKING CHANGE:` footer, and it must describe the migration.
+
+**The subject says what, the body says why.** The diff already shows what
+changed; it can never show why. A year later during a bisect, "why" is the only
+thing anyone needs.
+
+```
+fix(auth): reject tokens issued before a password change
+
+Tokens stayed valid after a password reset, so a stolen token survived the
+one action a user takes to revoke it. We now compare the token's issued-at
+against the user's password_changed_at.
+
+This invalidates all existing sessions on deploy, which is intended.
+
+Refs: SEC-88
+```
+
+Before committing, check the branch. If you are on the default branch, create a
+feature branch first. Never commit `.env`, credentials, build output, or
+dependency directories — if `git status` shows something surprising, stop and
+look at it rather than `git add -A`.
+
+## Pull request description
+
+Reviewers give a real review to a small pull request and a rubber stamp to a
+large one. Under ~400 changed lines is the target; if yours is larger, consider
+whether it splits.
+
+```markdown
+## What
+One or two sentences. The change, not the implementation tour.
+
+## Why
+The problem this solves, with a link to the issue.
+
+## How
+Only the decisions a reviewer could not infer from the diff: why this approach,
+what alternative was rejected, anything deliberately out of scope.
+
+## Verification
+How you know it works: tests added, what you ran manually, before/after numbers
+for a performance change, screenshots for anything visual.
+
+## Risk
+What could break, what to watch after deploy, how to roll back. Migrations,
+breaking changes, and anything requiring a config change in another system.
+```
+
+If the repository has a pull request template, use its headings instead.
+
+Point out your own uncertainties in the description. A reviewer who is told
+"I was unsure whether the retry should be idempotent here" reviews that spot
+carefully; one who is not, does not.
+
+---
 
 ## Conventional Commits in full
 

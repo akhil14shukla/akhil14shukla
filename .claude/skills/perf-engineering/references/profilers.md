@@ -5,6 +5,7 @@ find the one or two things that account for most of the cost, before changing
 anything.
 
 ## Contents
+
 - [Reading a profile](#reading-a-profile)
 - [Python](#python)
 - [Node / TypeScript](#node--typescript)

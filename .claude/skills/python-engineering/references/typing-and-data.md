@@ -1,6 +1,9 @@
 # Typing and data modelling in Python
 
 ## Contents
+
+- [Annotating: the standing rules](#annotating-the-standing-rules)
+- [Choosing a container](#choosing-a-container)
 - [What to annotate](#what-to-annotate)
 - [Protocols: interfaces without inheritance](#protocols-interfaces-without-inheritance)
 - [Generics](#generics)
@@ -9,6 +12,86 @@
 - [Typing callables, decorators, and kwargs](#typing-callables-decorators-and-kwargs)
 - [dataclasses vs pydantic vs attrs](#dataclasses-vs-pydantic-vs-attrs)
 - [Adding types to an untyped codebase](#adding-types-to-an-untyped-codebase)
+
+## Annotating: the standing rules
+
+Annotate every function that anyone else calls — parameters and return. Inside a
+function, annotate only where the type is not obvious from the assignment.
+Annotations are not decoration: they let `mypy` catch a whole class of bug
+before runtime, and they tell the reader the contract without them reading the
+body.
+
+```py
+def summarise_orders(
+    orders: Sequence[Order],
+    *,
+    since: datetime | None = None,
+    currency: Currency = Currency.USD,
+) -> OrderSummary:
+```
+
+Modern syntax (3.10+), which the `UP` ruff rules will enforce:
+
+- `str | None`, not `Optional[str]`; `int | str`, not `Union[int, str]`
+- `list[str]`, `dict[str, int]`, `tuple[int, ...]` — not the `typing` versions
+- `Self` for fluent/factory returns, `Literal["a", "b"]` for closed string sets,
+  `Final` for module constants
+- **Accept the general, return the concrete**: take `Iterable[T]`/`Sequence[T]`/
+  `Mapping[K, V]`, return `list[T]`/`dict[K, V]`. Callers can then pass whatever
+  they have, while your return type stays useful.
+- `Protocol` for structural interfaces — it lets you type a dependency without
+  the caller inheriting from anything, which is what makes test doubles easy.
+- `TypedDict` for JSON-ish dicts you cannot turn into classes; `NewType` for IDs
+  (`UserId = NewType("UserId", int)`) so a user id cannot be passed as an order id.
+
+`Any` disables checking for everything downstream of it. If you genuinely need
+it, leave a comment saying why. `cast()` is a claim you are making to the type
+checker with no runtime check behind it — reserve it for cases you can justify.
+
+Deeper material — generics, variance, overloads, narrowing, typing decorators
+and `**kwargs`, and how to add types to an untyped codebase — is in
+`references/typing-and-data.md`.
+
+## Choosing a container
+
+Passing dicts around is the most common source of unreadable Python. A dict has
+no contract: nobody can tell what keys exist, nothing catches a typo, and the
+IDE cannot help.
+
+```py
+# Before: what's in it? who knows. `order["totl"]` fails at runtime, in prod.
+def process(order: dict) -> dict: ...
+
+# After: the shape is the documentation, and typos are caught by mypy.
+@dataclass(frozen=True, slots=True)
+class Order:
+    id: OrderId
+    customer_id: CustomerId
+    lines: tuple[OrderLine, ...]
+    placed_at: datetime
+
+    @property
+    def total_cents(self) -> int:
+        return sum(line.total_cents for line in self.lines)
+```
+
+Choosing the right container:
+
+| Need | Use |
+|---|---|
+| Value object, compared by fields, immutable | `@dataclass(frozen=True, slots=True)` |
+| Same, but must be hashable and tuple-like | `NamedTuple` |
+| Closed set of named values | `enum.Enum` / `StrEnum` / `IntEnum` |
+| Validating untrusted external input | `pydantic.BaseModel` — at the boundary only |
+| Genuinely dynamic keys (counts, caches, JSON passthrough) | `dict` |
+
+`frozen=True` makes accidental mutation an error and the object hashable;
+`slots=True` cuts memory per instance substantially and speeds attribute access
+(worth it whenever you create many instances). Use pydantic where data arrives
+from outside — HTTP bodies, config files, message payloads — and convert to your
+own types inward, so validation cost and framework coupling stay at the edge.
+
+---
 
 ## What to annotate
 
