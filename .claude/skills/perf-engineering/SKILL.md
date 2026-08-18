@@ -1,6 +1,6 @@
 ---
 name: perf-engineering
-description: Make code measurably faster without making it unreadable — set a target, profile to find the dominant cost, fix the biggest one, prove the win. Covers algorithmic complexity, data structures, N+1 and I/O batching, caching, memory, concurrency, and honest benchmarking. Use whenever something is slow, expensive, or memory-hungry: "this is too slow", "optimise this", "reduce latency", "it times out", "high memory usage", "why is this endpoint slow", or when a change touches a hot path. Also use before accepting any optimisation, to check it was actually measured.
+description: Make code measurably faster without making it unreadable — set a target, profile to find the dominant cost, fix the biggest one, prove the win. Covers algorithmic complexity, data structures, N+1 and I/O batching, caching, memory, concurrency, and honest benchmarking. Use whenever something is slow, expensive, or memory-hungry: "this is too slow", "optimise this", "reduce latency", "it times out", "high memory usage", "cut our cloud bill", "the page is slow", "Core Web Vitals", or when designing an endpoint, schema, or page whose speed will matter. Also use before accepting any optimisation, to check it was actually measured.
 ---
 
 # Performance engineering
@@ -58,6 +58,18 @@ Work down this list; do not start at the bottom.
    Real, but usually a few percent, and it costs readability. Justify each with
    a measurement.
 
+## When no local fix will reach the target
+
+Profiling optimises *within* a design; it cannot escape one. An endpoint making
+six sequential network calls cannot get under the sum of those six round trips,
+whatever you do to the code between them. When the profile keeps pointing at
+"waiting", when the biggest cost is the number of round trips rather than any
+one of them, or when you are designing something whose speed will matter before
+any code exists, the decisions that set the ceiling are in
+`references/design-for-performance.md` — latency budgets, chattiness, read/write
+split, schema and index design, cache layers, frontend vitals, capacity
+arithmetic, and cost.
+
 ## Knowing when to stop
 
 Stop at the target. Then say what you did, what it bought, and what you
@@ -72,7 +84,8 @@ should not be made.
 
 | If you are… | Read |
 |---|---|
-| About to profile, or reading a profile or `EXPLAIN` output | `references/profilers.md` |
+| Designing an endpoint, schema, or page — or the bottleneck is structural | `references/design-for-performance.md` |
+| About to profile, or reading a profile or `EXPLAIN` output | `references/profilers/` — `reading-a-profile` first, then `python`, `node`, `go`, `rust`, `jvm`, `databases`, `production` |
 | Fixing a known bottleneck — data structures, I/O, caching, memory, concurrency, or benchmarking | `references/techniques.md` |
 | Considering replicas, queues, backpressure, pool sizing, rate limiting, or sharding | `references/scaling.md` |
 

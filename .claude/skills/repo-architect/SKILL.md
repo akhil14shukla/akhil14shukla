@@ -35,19 +35,35 @@ A genuine one-off script gets one well-named file with a docstring — ceremony
 has a cost too. Everything else gets a real structure, including "quick" tools,
 which are exactly the ones still running in three years.
 
+## Check what is current before you choose
+
+**Your knowledge of the ecosystem has a cutoff; the ecosystem does not.** Picking
+a framework from memory is how a project starts on a version that went
+end-of-life eight months ago, or adopts a library the maintainer archived.
+
+**Search the web before locking in** a runtime version, framework, ORM, auth
+library, datastore, build tool, deployment target, or any dependency that will
+be hard to remove. Establish four things — current stable version and the EOL of
+the one you would otherwise pick, whether it is still maintained, whether this is
+still the recommended approach, and any open security advisories — and confirm
+them against the primary source rather than a blog post. Then **state what you
+verified and when**, so a future reader knows whether to re-check.
+
+Skip it for things that do not move: a standard-library function, an established
+pattern, SQL semantics. `references/architecture-decisions.md` has the full
+method and the rest of the architecture decisions.
+
 ## The universal skeleton
 
 ```
 project/
-├── README.md              what it is, how to run it, how to test it
-├── LICENSE                absent = nobody may legally use it
+├── README.md                  what it is, how to run it, how to test it
+├── LICENSE                    absent = nobody may legally use it
+├── <manifest> + <lockfile>    lockfile committed, always
+├── .env.example               every variable, placeholder + comment
 ├── .gitignore  .editorconfig
-├── <manifest> + <lockfile>    committed, always
-├── .env.example           every variable, with a placeholder and a comment
-├── src/ (or the language's convention)
-├── tests/                 mirroring src/
-├── docs/  scripts/
-└── .github/workflows/     at minimum lint + type + test on every push
+├── src/  tests/  docs/  scripts/
+└── .github/workflows/         at minimum lint + type + test on every push
 ```
 
 Each missing entry is a question every newcomer has to ask someone. **Never
@@ -56,38 +72,34 @@ directories, or personal IDE settings.
 
 ## Organise by domain, not by kind
 
-This one decision determines whether the tree still makes sense at file three
-hundred.
+The one decision that determines whether the tree still makes sense at file
+three hundred.
 
 ```
-src/orders/     routes, service, models, tests      ← a feature is one directory
+src/orders/     routes, service, models, tests   ← a feature is ONE directory
 src/payments/   routes, service, models, tests
-src/shared/     config, db, logging, errors         ← genuinely cross-cutting only
+src/shared/     config, db, logging, errors      ← genuinely cross-cutting only
 
-# not: controllers/  services/  models/  utils/     ← every feature smeared
-#      across four directories, and one landfill
+# not: controllers/ services/ models/ utils/     ← every feature smeared across
+#      four directories, plus one landfill
 ```
 
-The real test: deleting a feature should be `rm -rf src/orders`. If removing one
-is hard, the boundaries are wrong. Layer-first is fine for a single-domain
-project under ~15 files, or where a framework mandates it — do not fight Django
-or Rails conventions; the domain split happens at the app level there.
+The real test: deleting a feature should be `rm -rf src/orders`. If that is
+hard, the boundaries are wrong. Layer-first is fine for a single-domain project
+under ~15 files, or where a framework mandates it — do not fight Django or Rails
+conventions; the domain split happens at the app level there.
 
 **Never create a `utils` module.** It means "I did not decide where this goes",
-and it becomes the file everything imports and nobody can change. Name modules
-for what they contain. A helper used by exactly one module lives in that module.
+and becomes the file everything imports and nobody can change. A helper used by
+one module lives in that module.
 
 ## Where a new file goes
 
-- Next to the code that uses it; if two domains use it, up one level, no further.
-- **Create a directory at the third related file, not the first.**
-- Depth past three or four levels below `src/` means the hierarchy is doing work
-  that naming should do.
-- Tests mirror source, so a reader never has to search for a file's test —
-  unless the ecosystem co-locates them (Go, Rust, frontend components), in which
-  case follow the ecosystem.
-- File names match their contents in the language's casing convention. Never
-  `misc`, `helpers`, `stuff`, `temp`, `new_`, or `v2`.
+Next to the code that uses it; up one level only if two domains use it. **Create
+a directory at the third related file, not the first.** Tests mirror source
+unless the ecosystem co-locates them. Never name a file `misc`, `helpers`,
+`stuff`, `temp`, `new_`, or `v2`. The full placement rules are in
+`references/layouts/placing-files.md`.
 
 ## Scaffolding
 
@@ -96,19 +108,20 @@ files, incomplete `.gitignore`s, and inconsistent naming come from:
 
 ```bash
 python scripts/scaffold.py --name my-project --lang python --kind app
-python scripts/scaffold.py --name my-svc --lang go --kind service --dry-run
+python scripts/scaffold.py --help     # --lang python|node|go|rust, --kind lib|app|cli|service
 ```
 
-`--lang`: `python|node|go|rust`. `--kind`: `lib|app|cli|service`. Writes the
-manifest, source and test trees, `.gitignore`, `.editorconfig`, README skeleton,
-and a CI workflow. Review and adapt it — a correct starting point, not a
+It writes the manifest, source and test trees, `.gitignore`, `.editorconfig`,
+README skeleton, and a CI workflow that runs lint, types, and tests. `--dry-run`
+prints without writing. Review and adapt — a correct starting point, not a
 finished project.
 
 ## Read the reference that matches your task
 
 | If you are… | Read |
 |---|---|
-| Building a specific kind of project and want the annotated tree | `references/layouts.md` |
+| Choosing a stack, deciding one service or several, picking an API style or datastore | `references/architecture-decisions.md` |
+| Building a specific kind of project and want the annotated tree | `references/layouts/` — `python`, `typescript`, `go`, `rust`, `java`, `placing-files` |
 | Deciding what may import what, where config and secrets live, or monorepo vs not | `references/boundaries-and-config.md` |
 | Reorganising an existing codebase, splitting a large module, or breaking an import cycle | `references/restructuring.md` |
 

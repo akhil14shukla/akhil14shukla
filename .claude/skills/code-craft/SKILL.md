@@ -72,7 +72,7 @@ secret? Is there leftover debug output or an unexplained magic number?
 | If you are… | Read |
 |---|---|
 | Naming things, shaping functions, or told the code is hard to follow | `references/naming-and-functions.md` |
-| Writing in a specific language and want its rules and footguns | `references/languages.md` |
+| Writing in a specific language and want its rules and footguns | `references/languages/` — one file each: `typescript`, `go`, `rust`, `java`, `csharp`, `ruby`, `shell`, `sql` |
 | Handling failure, validating input, or adding retries and timeouts | `references/errors-and-boundaries.md` |
 | Deciding where code belongs, managing state or dependencies, or considering a rewrite | `references/structure-and-change.md` |
 | Unsure why a construct reads badly | `references/anti-patterns.md` |
