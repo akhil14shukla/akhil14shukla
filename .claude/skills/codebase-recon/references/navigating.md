@@ -5,6 +5,7 @@ resolve a symbol across a large project, or work out *why* a piece of code
 exists before changing it.
 
 ## Contents
+
 - [Finding a definition fast](#finding-a-definition-fast)
 - [Per-ecosystem navigation](#per-ecosystem-navigation)
 - [Finding all callers before you change a signature](#finding-all-callers-before-you-change-a-signature)

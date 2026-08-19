@@ -65,5 +65,5 @@ and you have said which risks you chose not to cover.
 | If you are… | Read |
 |---|---|
 | Deciding what is worth testing, reaching for a mocking library, hunting edge cases, or facing a failing test | `references/what-to-test.md` |
-| Writing tests in a specific framework | `references/frameworks/` — `pytest`, `vitest-jest`, `go`, `rust`, `junit` |
+| Writing tests in a specific framework | `references/frameworks.md` — read only your framework's section |
 | Considering property-based, snapshot, or contract tests; testing async or concurrent code; using real databases; or characterising legacy code | `references/advanced.md` |

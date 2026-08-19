@@ -5,6 +5,7 @@ new endpoint, a schema, a page — or when profiling has told you the bottleneck
 structural and no local fix will reach the target.
 
 ## Contents
+
 - [The ceiling is set at design time](#the-ceiling-is-set-at-design-time)
 - [Latency budgets](#latency-budgets)
 - [Chattiness is the usual culprit](#chattiness-is-the-usual-culprit)

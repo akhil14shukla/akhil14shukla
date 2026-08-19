@@ -99,7 +99,7 @@ Next to the code that uses it; up one level only if two domains use it. **Create
 a directory at the third related file, not the first.** Tests mirror source
 unless the ecosystem co-locates them. Never name a file `misc`, `helpers`,
 `stuff`, `temp`, `new_`, or `v2`. The full placement rules are in
-`references/layouts/placing-files.md`.
+`references/layouts.md`.
 
 ## Scaffolding
 
@@ -121,7 +121,7 @@ finished project.
 | If you are… | Read |
 |---|---|
 | Choosing a stack, deciding one service or several, picking an API style or datastore | `references/architecture-decisions.md` |
-| Building a specific kind of project and want the annotated tree | `references/layouts/` — `python`, `typescript`, `go`, `rust`, `java`, `placing-files` |
+| Building a specific kind of project, or placing a new file | `references/layouts.md` — read only the tree that matches |
 | Deciding what may import what, where config and secrets live, or monorepo vs not | `references/boundaries-and-config.md` |
 | Reorganising an existing codebase, splitting a large module, or breaking an import cycle | `references/restructuring.md` |
 

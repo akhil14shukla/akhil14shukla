@@ -5,6 +5,7 @@ several, picking an API style or a datastore, or making any other choice that
 would be expensive to undo.
 
 ## Contents
+
 - [Verify currency before you choose](#verify-currency-before-you-choose)
 - [The reversibility lens](#the-reversibility-lens)
 - [One service or several](#one-service-or-several)

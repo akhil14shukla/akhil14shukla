@@ -6,11 +6,14 @@ written to be usable by any model: concrete rules with the reasoning attached,
 worked before/after examples, decision tables, and executable scripts for the
 parts that should be deterministic rather than recalled.
 
-They are built for progressive disclosure. A skill triggering costs about 1,000
+They are built for progressive disclosure: a skill triggering costs about 1,000
 tokens, not 4,000, because the depth lives in references that load only when the
-task actually needs them — and the per-language references are split one file
-per language, so reading the Go rules costs 550 tokens rather than 3,200. See
-[Context cost](#context-cost).
+task actually needs them. See [Context cost](#context-cost).
+
+**Only two skills are language-scoped** — `python-engineering` for Python, and
+`code-craft` for every other language. Language detail lives in references
+inside those two, never as separate skills, so the listing stays small and there
+is exactly one place to look per language.
 
 ## The suite
 
@@ -76,14 +79,10 @@ can invoke one directly: `/repo-architect`, `/python-engineering`, and so on.
 
 ```
 <skill>/
-├── SKILL.md              standing rules + a routing table — loads on trigger
-├── references/
-│   ├── <topic>.md        task-shaped depth, loaded only when routed to
-│   └── <variant>/        one file per language/framework, so you read only yours
-│       ├── go.md
-│       └── rust.md
-├── assets/               templates to fill in (docs-craft)
-└── scripts/              executable, deterministic work
+├── SKILL.md          standing rules + a routing table — loads on trigger
+├── references/       task-shaped depth, loaded only when routed to
+├── assets/           templates to fill in (docs-craft)
+└── scripts/          executable, deterministic work
 ```
 
 Every `SKILL.md` has the same shape, and the split between levels is deliberate:
@@ -98,10 +97,13 @@ Every `SKILL.md` has the same shape, and the split between levels is deliberate:
   speculatively. Every one opens by stating when to read it, so a wrong turn is
   caught in the first two lines.
 
-**Split a reference by variant when a reader needs exactly one section** — one
-language, one framework, one project type. Keep it whole when the sections are
-topical and a reader plausibly wants several. That rule is why
-`references/languages/` is eight files and `references/performance.md` is one.
+**References stay flat — one file per topic, no per-language subdirectories.**
+A reference that covers several languages (`languages.md`, `layouts.md`,
+`frameworks.md`, `profilers.md`) keeps them as sections under a table of
+contents, and the routing table says to read only the section that applies.
+Fanning these out into a file per language costs less per read but multiplies
+the surface a reader has to hold, and it makes the suite look like it has a
+skill per language when it deliberately does not.
 
 ## Context cost
 

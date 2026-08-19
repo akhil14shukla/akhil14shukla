@@ -85,7 +85,7 @@ should not be made.
 | If you are… | Read |
 |---|---|
 | Designing an endpoint, schema, or page — or the bottleneck is structural | `references/design-for-performance.md` |
-| About to profile, or reading a profile or `EXPLAIN` output | `references/profilers/` — `reading-a-profile` first, then `python`, `node`, `go`, `rust`, `jvm`, `databases`, `production` |
+| About to profile, or reading a profile or `EXPLAIN` output | `references/profilers.md` — read "Reading a profile" plus your ecosystem's section |
 | Fixing a known bottleneck — data structures, I/O, caching, memory, concurrency, or benchmarking | `references/techniques.md` |
 | Considering replicas, queues, backpressure, pool sizing, rate limiting, or sharding | `references/scaling.md` |
 
