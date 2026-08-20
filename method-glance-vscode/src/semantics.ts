@@ -8,6 +8,7 @@ import {
   methodAtLine,
 } from "./model";
 import { methodsFromSymbols, SymbolLike } from "./symbols";
+import { annotateShapes } from "./shape";
 import { methodsFromText } from "./textSource";
 
 /**
@@ -87,6 +88,10 @@ export async function getModel(
   if (!methods.length) {
     methods = methodsFromText(family, text);
   }
+
+  // Cheap, text-level, and independent of the language server — so the logic
+  // skeleton is available even when nothing else is.
+  annotateShapes(methods, lines, family);
 
   const model: GlanceModel = {
     uri: key,

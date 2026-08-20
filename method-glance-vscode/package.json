@@ -80,6 +80,11 @@
           "type": "boolean",
           "default": true,
           "description": "Mark methods that call a sibling with a gutter caret. Requires a language server that supports call hierarchy."
+        },
+        "methodGlance.showShapeAnnotations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show an inline logic skeleton (branches, loops, error handling, side effects) after each method's docstring."
         }
       }
     }
@@ -87,7 +92,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "tsc -p ./ && node ./out/test/run.js && node ./out/test/semantic.js && node ./out/test/layout.js",
+    "test": "tsc -p ./ && node ./out/test/run.js && node ./out/test/semantic.js && node ./out/test/layout.js && node ./out/test/shape.js",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {

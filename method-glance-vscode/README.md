@@ -61,6 +61,37 @@ unfolds first and then re-folds.
 Hovering a folded method's signature shows its docstring plus what it calls and
 who calls it.
 
+## The logic skeleton
+
+Folding tells you a method's name and docs. It does not tell you what the body
+*does*. Method Glance annotates each folded method with its shape:
+
+```
+def _charge(self, user, amount):
+    """Capture payment; raises PaymentError on decline."""…    1 catch · 1 guard · net log
+
+def _persist(self, cart, user, total):
+    """Write the order row and return the saved Order."""…    mutates · db
+```
+
+Branches, loops, error handlers, early exits, generators, awaits, complexity, and
+side effects — io, net, db, proc, log, time, random. Hover the annotation for the
+full breakdown. Anything over complexity 10 is flagged in the warning colour.
+
+This is read from the text, so it works even with no language server running.
+String and comment contents are stripped first, so a docstring mentioning "if"
+or a URL containing "post" is never miscounted.
+
+## The Glance Map
+
+`Ctrl+K Ctrl+M` (`Cmd+K Cmd+M`) opens the call graph beside your file: callers
+above callees, click a node to jump to it, hover to trace what it touches.
+
+Entry points — `main`, route and CLI decorators, `test_` functions — are outlined,
+because "where does this start" is the first question in an unfamiliar file.
+Node width tracks method size, the subtitle shows side effects, dashed edges
+cross file boundaries, and `Copy Mermaid` exports the diagram as text for a PR.
+
 ## Language support
 
 **Python** is the primary target and gets the most precise handling:

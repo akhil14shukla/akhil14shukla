@@ -7,6 +7,8 @@
  * not care which source produced it.
  */
 
+import { MethodShape } from "./shape";
+
 /** Inclusive, 0-based line span. */
 export interface LineRange {
   start: number;
@@ -36,6 +38,8 @@ export interface MethodNode {
   /** Raw docstring / doc comment text, when one was found. */
   doc?: string;
   origin: Provenance;
+  /** Structural summary of the body — see `src/shape.ts`. */
+  shape?: MethodShape;
 }
 
 /** A resolved call from one symbol to another. */

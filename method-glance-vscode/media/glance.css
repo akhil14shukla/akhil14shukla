@@ -135,6 +135,15 @@ svg { display: block; width: 100%; height: 100%; }
 .node.warn rect { stroke: var(--vscode-editorWarning-foreground, goldenrod); stroke-dasharray: 5 3; }
 .node.err  rect { stroke: var(--vscode-editorError-foreground, indianred); stroke-width: 1.8; }
 
+/* Entry points are where reading starts, so they get the one strong accent. */
+.node.entry rect {
+  stroke: var(--vscode-charts-green, seagreen);
+  stroke-width: 2;
+}
+/* High complexity thickens the box rather than recolouring it — colour is
+   already carrying severity, and two meanings on one channel is unreadable. */
+.node.complex rect { stroke-width: 2.4; }
+
 .node.external rect {
   fill: transparent;
   stroke-dasharray: 4 3;
@@ -180,6 +189,7 @@ svg { display: block; width: 100%; height: 100%; }
 .legend .hint { margin-left: auto; opacity: .85; }
 .sw { width: 14px; height: 10px; border-radius: 3px; display: inline-block; }
 .sw-node { background: var(--vscode-editorWidget-background, rgba(128,128,128,.2)); border: 1px solid var(--vscode-panel-border, rgba(128,128,128,.6)); }
+.sw-entry { border: 2px solid var(--vscode-charts-green, seagreen); }
 .sw-ext { border: 1px dashed var(--vscode-panel-border, rgba(128,128,128,.8)); }
 .sw-warn { border: 1px dashed var(--vscode-editorWarning-foreground, goldenrod); }
 .sw-err { border: 1.5px solid var(--vscode-editorError-foreground, indianred); }

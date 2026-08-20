@@ -4,6 +4,7 @@ import { GlanceHoverProvider } from "./hover";
 import { MethodNode } from "./model";
 import { GlanceMapPanel } from "./panel";
 import { getModel, invalidate, resolveCalls } from "./semantics";
+import { MethodShape, shapeSummary } from "./shape";
 
 /**
  * Contributes one folding range per method, ending at the last body line and
@@ -33,6 +34,74 @@ const callDecoration = vscode.window.createTextEditorDecorationType({
     color: new vscode.ThemeColor("editorCodeLens.foreground"),
   },
 });
+
+/**
+ * The inline logic skeleton. Rendered after the docstring — the line that stays
+ * on screen when folded — so a collapsed method still says what its body does,
+ * not just what it is called.
+ */
+const shapeDecoration = vscode.window.createTextEditorDecorationType({});
+
+/** Above this, a method is worth breaking up; flagged in the warning colour. */
+const COMPLEXITY_WARN = 10;
+
+function shapeHover(name: string, s: MethodShape): vscode.MarkdownString {
+  const md = new vscode.MarkdownString();
+  md.appendMarkdown(`**${name}** \u2014 complexity ${s.complexity}, nesting depth ${s.depth}\n\n`);
+  const rows: string[] = [];
+  if (s.branches) rows.push(`- ${s.branches} decision point${s.branches > 1 ? "s" : ""}`);
+  if (s.loops) rows.push(`- ${s.loops} loop${s.loops > 1 ? "s" : ""}`);
+  if (s.handlers) rows.push(`- ${s.handlers} error handler${s.handlers > 1 ? "s" : ""}`);
+  if (s.guards) rows.push(`- ${s.guards} early exit${s.guards > 1 ? "s" : ""}`);
+  if (s.returns) rows.push(`- ${s.returns} return${s.returns > 1 ? "s" : ""}`);
+  if (s.raises) rows.push(`- ${s.raises} raise${s.raises > 1 ? "s" : ""}`);
+  if (s.yields) rows.push("- generator");
+  if (s.awaits) rows.push(`- ${s.awaits} await${s.awaits > 1 ? "s" : ""}`);
+  if (s.mutates) rows.push("- mutates instance state");
+  if (s.effects.length) rows.push(`- touches: ${s.effects.join(", ")}`);
+  md.appendMarkdown(rows.join("\n"));
+  if (s.complexity >= COMPLEXITY_WARN) {
+    md.appendMarkdown("\n\n_High complexity \u2014 consider splitting._");
+  }
+  return md;
+}
+
+async function decorateShapes(editor: vscode.TextEditor): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration("methodGlance");
+  if (!cfg.get<boolean>("showShapeAnnotations", true)) {
+    editor.setDecorations(shapeDecoration, []);
+    return;
+  }
+  const model = await getModel(editor.document);
+  const opts: vscode.DecorationOptions[] = [];
+
+  for (const m of model.methods) {
+    const s = m.shape;
+    if (!s || m.foldStart >= editor.document.lineCount) {
+      continue;
+    }
+    const summary = shapeSummary(s);
+    const hot = s.complexity >= COMPLEXITY_WARN;
+    if (!summary && !hot) {
+      continue;
+    }
+    const text = hot ? `${summary ? summary + " \u00b7 " : ""}complexity ${s.complexity}` : summary;
+    opts.push({
+      range: editor.document.lineAt(m.foldStart).range,
+      hoverMessage: shapeHover(m.name, s),
+      renderOptions: {
+        after: {
+          contentText: `    ${text}`,
+          color: new vscode.ThemeColor(
+            hot ? "editorWarning.foreground" : "editorCodeLens.foreground"
+          ),
+          fontStyle: "italic",
+        },
+      },
+    });
+  }
+  editor.setDecorations(shapeDecoration, opts);
+}
 
 async function glanceFold(editor: vscode.TextEditor): Promise<void> {
   const model = await getModel(editor.document);
@@ -100,7 +169,8 @@ export function activate(context: vscode.ExtensionContext): void {
       selector,
       new GlanceHoverProvider()
     ),
-    callDecoration
+    callDecoration,
+    shapeDecoration
   );
 
   context.subscriptions.push(
@@ -120,7 +190,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Drop cached models when the document changes.
   context.subscriptions.push(
-    vscode.workspace.onDidChangeTextDocument((e) => invalidate(e.document.uri))
+    vscode.workspace.onDidChangeTextDocument((e) => {
+      invalidate(e.document.uri);
+      const editor = vscode.window.activeTextEditor;
+      if (editor && editor.document === e.document) {
+        void decorateShapes(editor);
+      }
+    })
   );
 
   context.subscriptions.push(
@@ -129,6 +205,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
       void decorateCallers(editor);
+      void decorateShapes(editor);
       const cfg = vscode.workspace.getConfiguration("methodGlance");
       if (cfg.get<boolean>("foldOnOpen", false)) {
         void glanceFold(editor);
@@ -138,6 +215,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   if (vscode.window.activeTextEditor) {
     void decorateCallers(vscode.window.activeTextEditor);
+    void decorateShapes(vscode.window.activeTextEditor);
   }
 }
 

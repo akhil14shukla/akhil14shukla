@@ -75,30 +75,71 @@ so it is never computed eagerly for a whole file:
   cached model, so repeat hovers are free.
 - Gutter carets are capped by `DECORATION_BUDGET`.
 
+## The logic skeleton
+
+A call graph answers *what calls what*. It says nothing about **what a function
+does** — and that is usually the question. `src/shape.ts` reads each body's
+structure and reports it next to the docstring, so a folded file says:
+
+```
+def _charge(self, user, amount):
+    """Capture payment; raises PaymentError on decline."""…    1 catch · 1 guard · net log
+
+def _persist(self, cart, user, total):
+    """Write the order row and return the saved Order."""…    mutates · db
+```
+
+Neither the name nor the docstring told you that one method talks to the network
+and the other writes to the database.
+
+It measures decision points, loops, error handlers, early exits, generators,
+awaits, nesting depth, cyclomatic complexity, instance-state mutation, and side
+effects (io, net, db, proc, log, time, random).
+
+Three decisions worth recording:
+
+- **Text-level on purpose.** Control-flow keywords are unambiguous once comments
+  and string bodies are stripped, and this way the skeleton works with no
+  language server running — the one signal that is always available.
+- **Literals are stripped before counting.** A docstring saying "if" and a URL
+  containing "post" must not register as a branch and a network call. This is
+  the single largest source of false readings, and it is tested directly.
+- **A nested helper is measured as its own method**, so an outer function is not
+  blamed for its helper's complexity.
+
+Entry points — `main`, route/CLI/task decorators, `test_` prefixes — are detected
+too. In a strange file, "where does this start" is the first question, and the
+map marks those nodes.
+
 ## Visual roadmap
 
-All four render from the same model. Ordered by value per unit of work.
+Everything renders from the same model. Ordered by value per unit of work.
 
-### 1. Glance Map panel — interactive, deterministic
+### Built
 
-The folded file as a node-link graph: methods as nodes, resolved calls as edges,
-click to jump. Layered layout (ELK or dagre) computed locally, drawn as SVG in a
-webview so it stays interactive and exact.
+- **Glance Map panel** — call graph, click to jump, hover to trace.
+- **Logic skeleton** — inline in the editor and in map subtitles.
+- **Entry points** — marked in the map.
+- **Mermaid export.**
 
-Information channels, all driven by real data rather than decoration: node width
-= line count, border = diagnostic severity, fill = container class, edge weight =
-call-site count, dashed = cross-file.
+### Still ahead
 
-### 2. Sequence view
+### 1. Sequence view
 
 Pick an entry point, walk `provideOutgoingCalls` breadth-first to a depth limit,
 render lifelines in call order. This is the view that answers "what actually
 happens when this runs" — the thing a folded file still cannot show.
 
-### 3. Class diagram
+### 2. Class diagram
 
 `prepareTypeHierarchy` + `provideSupertypes` across the file's classes, with
 methods grouped under their owner. Cheap once the type edges exist.
+
+### 3. Data-flow view
+
+Which parameters reach which calls. The remaining question the skeleton does not
+answer: not *what* a function touches, but *how the values move through it*.
+Needs real expression-level analysis, so it is the most expensive item here.
 
 ### 4. Module map
 

@@ -3,6 +3,7 @@ import { familyFor } from "./languages";
 import { GraphEdge, GraphNode, layout } from "./layout";
 import { toMermaid } from "./mermaid";
 import { getModel, resolveCalls } from "./semantics";
+import { shapeSummary } from "./shape";
 
 /** Cap on call-hierarchy requests for one map. Each method costs one round
  * trip, so a very large file is summarised rather than stalling the editor. */
@@ -52,6 +53,10 @@ async function buildGraph(doc: vscode.TextDocument): Promise<RawGraph> {
       group: m.container,
       lines: m.range.end - m.range.start + 1,
       severity: severityFor(diags, m.range.start, m.range.end),
+      entry: m.shape?.entry,
+      complexity: m.shape?.complexity,
+      effects: m.shape?.effects,
+      shape: m.shape ? shapeSummary(m.shape) : undefined,
     });
     lines[m.id] = m.selectionLine;
   }
@@ -298,12 +303,13 @@ export class GlanceMapPanel {
 
   <footer class="legend" id="legend">
     <span><i class="sw sw-node"></i>method</span>
+    <span><i class="sw sw-entry"></i>entry point</span>
     <span><i class="sw sw-ext"></i>external</span>
     <span><i class="sw sw-warn"></i>warning</span>
     <span><i class="sw sw-err"></i>error</span>
     <span><i class="sw sw-line"></i>calls</span>
     <span><i class="sw sw-dash"></i>cross-file</span>
-    <span class="hint">width = method size · click to open · hover to trace</span>
+    <span class="hint">width = method size · subtitle = side effects · click to open</span>
   </footer>
 
   <script nonce="${n}" src="${js}"></script>

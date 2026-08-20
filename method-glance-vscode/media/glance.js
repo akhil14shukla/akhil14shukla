@@ -193,6 +193,8 @@
     nodes.forEach((n) => {
       const cls = ["node"];
       if (n.external) cls.push("external");
+      if (n.entry) cls.push("entry");
+      if (n.complexity >= 10) cls.push("complex");
       if (n.severity === 2) cls.push("err");
       else if (n.severity === 1) cls.push("warn");
 
@@ -204,9 +206,13 @@
       }, nodeLayer);
 
       const label = n.group ? `${n.group}.${n.name || n.label}` : n.label;
-      el("title", {}, g).textContent =
-        `${label}${n.lines ? ` — ${n.lines} lines` : ""}` +
-        (n.external ? " (defined outside this file)" : "");
+      const tip = [label];
+      if (n.lines) tip.push(`${n.lines} lines`);
+      if (n.complexity) tip.push(`complexity ${n.complexity}`);
+      if (n.shape) tip.push(n.shape);
+      if (n.entry) tip.push("entry point");
+      if (n.external) tip.push("defined outside this file");
+      el("title", {}, g).textContent = tip.join(" — ");
 
       el("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: 6 }, g);
 
@@ -218,16 +224,29 @@
         }, g);
       }
 
-      const hasSub = !!n.group || !!n.lines;
+      const hasSub = !!n.group || !!n.lines || !!(n.effects && n.effects.length);
       el("text", {
         x: n.x + 12,
         y: hasSub ? n.y + 16 : n.y + n.h / 2,
-      }, g).textContent = truncate(n.label, n.w) + (selfCalls.has(n.id) ? " ↻" : "");
+      }, g).textContent =
+        (n.entry ? "▶ " : "") +
+        truncate(n.label, n.w - (n.entry ? 14 : 0)) +
+        (selfCalls.has(n.id) ? " ↻" : "");
 
       if (hasSub) {
+        // Ordered by what earns the space. The class name is already carried by
+        // the rail colour, so it is the first thing dropped when the box is
+        // narrow; what the body *does* is not recoverable from anything else.
         const bits = [];
-        if (n.group) bits.push(n.group);
+        if (n.effects && n.effects.length) bits.push(n.effects.join(" "));
+        if (n.complexity >= 10) bits.push(`C${n.complexity}`);
         if (n.lines) bits.push(`${n.lines}L`);
+        if (n.group) bits.push(n.group);
+
+        const room = Math.floor((n.w - 24) / 5.4);
+        while (bits.length > 1 && bits.join(" · ").length > room) {
+          bits.pop();
+        }
         el("text", {
           x: n.x + 12, y: n.y + 30, class: "sub",
         }, g).textContent = truncate(bits.join(" · "), n.w, 5.4);
