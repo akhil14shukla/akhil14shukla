@@ -14,6 +14,8 @@
   const fileEl = document.getElementById("file");
   const badgeEl = document.getElementById("badge");
   const extBox = /** @type {HTMLInputElement} */ (document.getElementById("ext"));
+  const viewSel = /** @type {HTMLSelectElement} */ (document.getElementById("view"));
+  const captionEl = document.getElementById("caption");
 
   /** @type {any} */ let current = null;
   const view = { x: 0, y: 0, k: 1 };
@@ -94,12 +96,14 @@
     }
   }
 
-  function render(data, meta) {
-    current = { data, meta };
+  function render(scene, meta) {
+    current = { data: scene, meta };
     svg.textContent = "";
-    const { nodes, edges, width, height, detachedFrom } = data;
+    const { nodes, edges, width, height, lanes, dividers } = scene;
 
     fileEl.textContent = meta.file ? `Glance Map · ${meta.file}` : "Glance Map";
+    captionEl.textContent = scene.caption || "";
+    captionEl.hidden = !scene.caption;
 
     const notes = [];
     if (!meta.semantic) notes.push("text fallback");
@@ -115,24 +119,16 @@
     }
 
     if (!nodes.length) {
-      stateEl.textContent =
-        "No methods found in this file.\nOpen a file with functions or methods to map it.";
+      stateEl.textContent = scene.empty || "Nothing to show for this file.";
       stateEl.style.display = "";
       svg.hidden = true;
       return;
     }
-    if (!edges.length && meta.semantic) {
-      stateEl.textContent = "";
-      stateEl.style.display = "none";
-    } else {
-      stateEl.style.display = "none";
-    }
+    stateEl.style.display = "none";
     svg.hidden = false;
 
-    svg.setAttribute("viewBox", `0 0 ${svg.clientWidth || width} ${svg.clientHeight || height}`);
     const root = el("g", { id: "root" }, svg);
 
-    // build adjacency for tracing
     adj = new Map();
     nodes.forEach((n) => adj.set(n.id, new Set()));
     edges.forEach((e) => {
@@ -142,129 +138,139 @@
       }
     });
 
-    // divider for the unconnected section
-    if (detachedFrom !== undefined) {
-      el("line", {
-        x1: 16, y1: detachedFrom, x2: width - 16, y2: detachedFrom,
-        class: "divider",
-      }, root);
-      el("text", {
-        x: 16, y: detachedFrom + 18, class: "divider-label",
-      }, root).textContent = "no resolved calls";
+    // lifelines sit behind everything
+    if (lanes && lanes.length) {
+      const laneLayer = el("g", {}, root);
+      lanes.forEach((l) => {
+        el("line", {
+          x1: l.x, y1: l.top, x2: l.x, y2: l.bottom, class: "lane",
+        }, laneLayer);
+      });
     }
 
-    // edges first so nodes sit above them
+    (dividers || []).forEach((d) => {
+      el("line", {
+        x1: 16, y1: d.y, x2: width - 16, y2: d.y, class: "divider",
+      }, root);
+      el("text", { x: 16, y: d.y + 18, class: "divider-label" }, root).textContent =
+        d.label;
+    });
+
+    const groups = [...new Set(nodes.map((n) => n.group).filter(Boolean))].sort();
+
+    // edges under nodes
     const edgeLayer = el("g", {}, root);
-    edges.forEach((e, i) => {
-      if (!e.points.length) {
-        return; // self-call, drawn as a badge on the node
+    edges.forEach((e) => {
+      if (e.self || !e.points || e.points.length < 2) {
+        return;
       }
-      const p = el("path", {
+      const cls = ["edge"];
+      if (e.style === "dashed") cls.push("cross");
+      if (e.style === "inherit") cls.push("inherit");
+      if (e.style === "flow") cls.push("flow");
+
+      el("path", {
         d: pathFor(e.points),
-        class: "edge" + (e.cross ? " cross" : ""),
+        class: cls.join(" "),
         "stroke-width": Math.min(3.2, 1.4 + ((e.count || 1) - 1) * 0.5),
         "data-from": e.from,
         "data-to": e.to,
-        "data-i": i,
       }, edgeLayer);
-      p.setAttribute("marker-end", "");
 
-      // arrowhead at the callee
       const last = e.points[e.points.length - 1];
-      const prev = e.points[e.points.length - 2] || last;
+      const prev = e.points[e.points.length - 2];
       const ang = Math.atan2(last.y - prev.y, last.x - prev.x);
-      const s = 5.5;
+      const size = 5.5;
       el("path", {
-        d: `M ${last.x} ${last.y} L ${last.x - s * Math.cos(ang - 0.5)} ${last.y - s * Math.sin(ang - 0.5)} L ${last.x - s * Math.cos(ang + 0.5)} ${last.y - s * Math.sin(ang + 0.5)} Z`,
-        class: "arrow",
+        d: `M ${last.x} ${last.y} L ${last.x - size * Math.cos(ang - 0.5)} ${last.y - size * Math.sin(ang - 0.5)} L ${last.x - size * Math.cos(ang + 0.5)} ${last.y - size * Math.sin(ang + 0.5)} Z`,
+        class: e.style === "inherit" ? "arrow hollow" : "arrow",
         "data-from": e.from,
         "data-to": e.to,
       }, edgeLayer);
+
+      if (e.label || e.order) {
+        const mid = e.points[Math.floor(e.points.length / 2)];
+        const midPrev = e.points[Math.floor(e.points.length / 2) - 1] || mid;
+        const lx = (mid.x + midPrev.x) / 2;
+        const ly = (mid.y + midPrev.y) / 2;
+        const text = (e.order ? `${e.order}. ` : "") + (e.label || "");
+        const t = el("text", {
+          x: lx, y: ly - 6, class: "edgelabel", "text-anchor": "middle",
+          "data-from": e.from, "data-to": e.to,
+        }, edgeLayer);
+        t.textContent = text;
+      }
     });
 
-    const selfCalls = new Set(
-      edges.filter((e) => !e.points.length).map((e) => e.from)
-    );
-
-    const groups = [...new Set(nodes.map((n) => n.group).filter(Boolean))].sort();
+    const selfIds = new Set(edges.filter((e) => e.self).map((e) => e.from));
 
     // nodes
     const nodeLayer = el("g", {}, root);
     nodes.forEach((n) => {
-      const cls = ["node"];
+      const cls = ["node", "role-" + (n.role || "method")];
       if (n.external) cls.push("external");
       if (n.entry) cls.push("entry");
       if (n.complexity >= 10) cls.push("complex");
       if (n.severity === 2) cls.push("err");
       else if (n.severity === 1) cls.push("warn");
+      if (n.clickLine === undefined) cls.push("static");
 
       const g = el("g", {
         class: cls.join(" "),
         "data-id": n.id,
         tabindex: "0",
-        role: "button",
+        role: n.clickLine === undefined ? "img" : "button",
       }, nodeLayer);
 
-      const label = n.group ? `${n.group}.${n.name || n.label}` : n.label;
-      const tip = [label];
-      if (n.lines) tip.push(`${n.lines} lines`);
-      if (n.complexity) tip.push(`complexity ${n.complexity}`);
-      if (n.shape) tip.push(n.shape);
-      if (n.entry) tip.push("entry point");
-      if (n.external) tip.push("defined outside this file");
-      el("title", {}, g).textContent = tip.join(" — ");
-
+      el("title", {}, g).textContent = n.tip || n.label;
       el("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: 6 }, g);
 
       if (n.group) {
         el("line", {
           x1: n.x + 1.5, y1: n.y + 7, x2: n.x + 1.5, y2: n.y + n.h - 7,
-          class: "rail",
-          stroke: groupColor(n.group, groups),
+          class: "rail", stroke: groupColor(n.group, groups),
         }, g);
       }
 
-      const hasSub = !!n.group || !!n.lines || !!(n.effects && n.effects.length);
+      const hasRows = n.rows && n.rows.length;
+      const hasSub = !!n.sub;
       el("text", {
         x: n.x + 12,
-        y: hasSub ? n.y + 16 : n.y + n.h / 2,
+        y: hasSub || hasRows ? n.y + 16 : n.y + n.h / 2,
       }, g).textContent =
-        (n.entry ? "▶ " : "") +
+        (n.entry ? "\u25b6 " : "") +
         truncate(n.label, n.w - (n.entry ? 14 : 0)) +
-        (selfCalls.has(n.id) ? " ↻" : "");
+        (selfIds.has(n.id) ? " \u21bb" : "");
 
       if (hasSub) {
-        // Ordered by what earns the space. The class name is already carried by
-        // the rail colour, so it is the first thing dropped when the box is
-        // narrow; what the body *does* is not recoverable from anything else.
-        const bits = [];
-        if (n.effects && n.effects.length) bits.push(n.effects.join(" "));
-        if (n.complexity >= 10) bits.push(`C${n.complexity}`);
-        if (n.lines) bits.push(`${n.lines}L`);
-        if (n.group) bits.push(n.group);
-
-        const room = Math.floor((n.w - 24) / 5.4);
-        while (bits.length > 1 && bits.join(" · ").length > room) {
-          bits.pop();
-        }
         el("text", {
           x: n.x + 12, y: n.y + 30, class: "sub",
-        }, g).textContent = truncate(bits.join(" · "), n.w, 5.4);
+        }, g).textContent = truncate(n.sub, n.w, 5.4);
       }
 
-      g.addEventListener("click", () => {
-        if (!n.external) {
-          vscode.postMessage({ type: "reveal", id: n.id });
-        }
-      });
-      g.addEventListener("keydown", (ev) => {
-        if (ev.key === "Enter" || ev.key === " ") {
-          ev.preventDefault();
-          if (!n.external) {
+      if (hasRows) {
+        el("line", {
+          x1: n.x, y1: n.y + 26, x2: n.x + n.w, y2: n.y + 26, class: "rowrule",
+        }, g);
+        n.rows.forEach((row, i) => {
+          el("text", {
+            x: n.x + 12, y: n.y + 42 + i * 16, class: "row",
+          }, g).textContent = truncate(row, n.w, 6.2);
+        });
+      }
+
+      const navigable = n.clickLine !== undefined;
+      if (navigable) {
+        g.addEventListener("click", () =>
+          vscode.postMessage({ type: "reveal", id: n.id })
+        );
+        g.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === " ") {
+            ev.preventDefault();
             vscode.postMessage({ type: "reveal", id: n.id });
           }
-        }
-      });
+        });
+      }
       g.addEventListener("mouseenter", () => trace(n.id));
       g.addEventListener("focus", () => trace(n.id));
       g.addEventListener("mouseleave", clearTrace);
@@ -284,7 +290,7 @@
       g.classList.toggle("hot", nid === id);
       g.classList.toggle("dim", !related.has(nid));
     });
-    svg.querySelectorAll(".edge, .arrow").forEach((p) => {
+    svg.querySelectorAll(".edge, .arrow, .edgelabel").forEach((p) => {
       const on =
         p.getAttribute("data-from") === id || p.getAttribute("data-to") === id;
       p.classList.toggle("hot", on);
@@ -294,7 +300,9 @@
 
   function clearTrace() {
     svg.querySelectorAll(".node").forEach((g) => g.classList.remove("hot", "dim"));
-    svg.querySelectorAll(".edge, .arrow").forEach((p) => p.classList.remove("hot", "dim"));
+    svg.querySelectorAll(".edge, .arrow, .edgelabel").forEach((p) =>
+      p.classList.remove("hot", "dim")
+    );
   }
 
   function fit() {
@@ -359,23 +367,22 @@
   document.getElementById("copy").addEventListener("click", () =>
     vscode.postMessage({ type: "copyMermaid" })
   );
-  extBox.addEventListener("change", () =>
+  function requestLayout() {
     vscode.postMessage({
       type: "relayout",
       width: Math.max(520, stage.clientWidth - 40),
       showExternal: extBox.checked,
-    })
-  );
+      view: viewSel.value,
+    });
+  }
+  extBox.addEventListener("change", requestLayout);
+  viewSel.addEventListener("change", requestLayout);
 
   let resizeTimer = 0;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      vscode.postMessage({
-        type: "relayout",
-        width: Math.max(520, stage.clientWidth - 40),
-        showExternal: extBox.checked,
-      });
+      requestLayout();
     }, 160);
   });
 
@@ -389,14 +396,12 @@
     }
     if (msg.type === "render") {
       extBox.checked = !!msg.meta.showExternal;
-      render(msg.layout, msg.meta);
+      if (msg.meta.view) viewSel.value = msg.meta.view;
+      extBox.parentElement.hidden = msg.meta.view !== "graph";
+      render(msg.scene, msg.meta);
     }
   });
 
   // ask for a first layout sized to the panel
-  vscode.postMessage({
-    type: "relayout",
-    width: Math.max(520, stage.clientWidth - 40),
-    showExternal: false,
-  });
+  requestLayout();
 })();

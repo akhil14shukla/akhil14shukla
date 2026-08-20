@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { familyFor } from "./languages";
 import { GraphEdge, GraphNode, layout } from "./layout";
 import { toMermaid } from "./mermaid";
+import { graphScene, Scene, SceneKind } from "./scene";
 import { getModel, resolveCalls } from "./semantics";
 import { shapeSummary } from "./shape";
 
@@ -122,6 +123,10 @@ export class GlanceMapPanel {
   private docUri: vscode.Uri | undefined;
   private showExternal = false;
   private lastWidth = 900;
+  private view: SceneKind = "graph";
+  /** Line the cursor sat on when the view was last built — the anchor for the
+   * views that describe one method rather than the whole file. */
+  private anchorLine = 0;
 
   static show(context: vscode.ExtensionContext): void {
     const column = vscode.ViewColumn.Beside;
@@ -182,11 +187,20 @@ export class GlanceMapPanel {
     id?: string;
     width?: number;
     showExternal?: boolean;
+    view?: SceneKind;
   }): Promise<void> {
     if (msg.type === "relayout") {
       this.lastWidth = msg.width ?? this.lastWidth;
       this.showExternal = msg.showExternal ?? this.showExternal;
-      this.post();
+      const nextView = msg.view ?? this.view;
+      const changed = nextView !== this.view;
+      this.view = nextView;
+      if (changed) {
+        // Other views need data the graph build does not gather.
+        await this.refresh();
+      } else {
+        await this.post();
+      }
       return;
     }
 
@@ -239,27 +253,34 @@ export class GlanceMapPanel {
       return;
     }
     this.docUri = editor.document.uri;
+    this.anchorLine = editor.selection.active.line;
     this.panel.webview.postMessage({ type: "loading" });
     this.graph = await buildGraph(editor.document);
     this.panel.title = `Glance Map · ${this.graph.file}`;
-    this.post();
+    await this.post();
   }
 
-  private post(): void {
+  /** Build the Scene for the selected view and hand it to the webview. */
+  private async buildScene(): Promise<Scene> {
+    const { nodes, edges } = this.filtered();
+    return graphScene(layout(nodes, edges, this.lastWidth), this.graph!.lines);
+  }
+
+  private async post(): Promise<void> {
     if (!this.graph) {
       return;
     }
-    const { nodes, edges } = this.filtered();
-    const result = layout(nodes, edges, this.lastWidth);
+    const scene = await this.buildScene();
     this.panel.webview.postMessage({
       type: "render",
-      layout: result,
+      scene,
       meta: {
         file: this.graph.file,
         semantic: this.graph.semantic,
         truncated: this.graph.truncated,
         externalCount: this.graph.nodes.filter((n) => n.external).length,
         showExternal: this.showExternal,
+        view: this.view,
       },
     });
   }
@@ -289,12 +310,21 @@ export class GlanceMapPanel {
       <span id="badge" class="badge" hidden></span>
     </div>
     <div class="bar-right">
+      <select id="view" title="Diagram">
+        <option value="graph">Call graph</option>
+        <option value="sequence">Sequence</option>
+        <option value="classes">Classes</option>
+        <option value="flow">Data flow</option>
+        <option value="modules">Modules</option>
+      </select>
       <label class="toggle"><input type="checkbox" id="ext"> External calls</label>
       <button id="fit" title="Fit to window">Fit</button>
       <button id="copy" title="Copy as Mermaid">Copy Mermaid</button>
       <button id="reload" title="Recompute">Refresh</button>
     </div>
   </header>
+
+  <div id="caption" class="caption" hidden></div>
 
   <div id="stage" class="stage" tabindex="0">
     <div id="state" class="state">Open a supported file to map it.</div>
