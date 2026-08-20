@@ -2,7 +2,10 @@ import * as vscode from "vscode";
 import { familyFor } from "./languages";
 import { GraphEdge, GraphNode, layout } from "./layout";
 import { toMermaid } from "./mermaid";
+import { siteContext } from "./callSite";
+import { methodAtLine } from "./model";
 import { graphScene, Scene, SceneKind } from "./scene";
+import { SeqCall, SeqParticipant, sequenceScene } from "./sequenceLayout";
 import { getModel, resolveCalls } from "./semantics";
 import { shapeSummary } from "./shape";
 
@@ -18,6 +21,11 @@ interface RawGraph {
   truncated: boolean;
   semantic: boolean;
   file: string;
+  /** Call sites annotated with whether they actually run unconditionally. */
+  seqCalls: SeqCall[];
+  participants: SeqParticipant[];
+  /** Ids of methods that read as entry points. */
+  entries: string[];
 }
 
 /** Highest diagnostic severity overlapping a line range: 2 error, 1 warning. */
@@ -62,6 +70,17 @@ async function buildGraph(doc: vscode.TextDocument): Promise<RawGraph> {
     lines[m.id] = m.selectionLine;
   }
 
+  const family = familyFor(doc.languageId);
+  const docLines = doc.getText().split(/\r\n|\r|\n/);
+  const seqCalls: SeqCall[] = [];
+  const participants: SeqParticipant[] = model.methods.map((m) => ({
+    id: m.id,
+    label: m.name,
+    group: m.container,
+    clickLine: m.selectionLine,
+  }));
+  const entries = model.methods.filter((m) => m.shape?.entry).map((m) => m.id);
+
   const budget = model.methods.slice(0, RESOLVE_BUDGET);
   const edges: GraphEdge[] = [];
   const externals = new Map<string, GraphNode>();
@@ -74,6 +93,22 @@ async function buildGraph(doc: vscode.TextDocument): Promise<RawGraph> {
         for (const c of resolved) {
           if (c.to) {
             edges.push({ from: m.id, to: c.to, count: c.atLines.length });
+            for (const line of c.atLines) {
+              const ctx = siteContext(
+                docLines,
+                m.range.start,
+                m.range.end,
+                line,
+                family
+              );
+              seqCalls.push({
+                from: m.id,
+                to: c.to,
+                line,
+                conditional: ctx.conditional || undefined,
+                repeated: ctx.repeated || undefined,
+              });
+            }
           } else {
             // Keep external callees as their own nodes; the view hides them by
             // default so library noise does not drown the file's own shape.
@@ -102,6 +137,9 @@ async function buildGraph(doc: vscode.TextDocument): Promise<RawGraph> {
     truncated: model.methods.length > RESOLVE_BUDGET,
     semantic: model.semantic,
     file: doc.uri.path.split("/").pop() || "",
+    seqCalls,
+    participants,
+    entries,
   };
 }
 
@@ -127,6 +165,10 @@ export class GlanceMapPanel {
   /** Line the cursor sat on when the view was last built — the anchor for the
    * views that describe one method rather than the whole file. */
   private anchorLine = 0;
+  /** Id of the method enclosing the cursor, if any. */
+  private enclosingId: string | undefined;
+  /** How far the sequence trace follows calls. */
+  private depth = 4;
 
   static show(context: vscode.ExtensionContext): void {
     const column = vscode.ViewColumn.Beside;
@@ -188,10 +230,14 @@ export class GlanceMapPanel {
     width?: number;
     showExternal?: boolean;
     view?: SceneKind;
+    depth?: number;
   }): Promise<void> {
     if (msg.type === "relayout") {
       this.lastWidth = msg.width ?? this.lastWidth;
       this.showExternal = msg.showExternal ?? this.showExternal;
+      if (msg.depth !== undefined) {
+        this.depth = msg.depth;
+      }
       const nextView = msg.view ?? this.view;
       const changed = nextView !== this.view;
       this.view = nextView;
@@ -254,6 +300,8 @@ export class GlanceMapPanel {
     }
     this.docUri = editor.document.uri;
     this.anchorLine = editor.selection.active.line;
+    const cursorModel = await getModel(editor.document);
+    this.enclosingId = methodAtLine(cursorModel.methods, this.anchorLine)?.id;
     this.panel.webview.postMessage({ type: "loading" });
     this.graph = await buildGraph(editor.document);
     this.panel.title = `Glance Map · ${this.graph.file}`;
@@ -262,8 +310,73 @@ export class GlanceMapPanel {
 
   /** Build the Scene for the selected view and hand it to the webview. */
   private async buildScene(): Promise<Scene> {
+    const g = this.graph!;
+
+    if (this.view === "sequence") {
+      const parts = new Map(g.participants.map((p) => [p.id, p]));
+      const byCaller = new Map<string, SeqCall[]>();
+      for (const c of g.seqCalls) {
+        if (!byCaller.has(c.from)) {
+          byCaller.set(c.from, []);
+        }
+        byCaller.get(c.from)!.push(c);
+      }
+      const root = this.sequenceRoot(g, byCaller);
+      if (!root) {
+        return {
+          kind: "sequence",
+          nodes: [],
+          edges: [],
+          width: this.lastWidth,
+          height: 200,
+          empty: "No methods found to trace.",
+        };
+      }
+      return sequenceScene(root, parts, byCaller, this.depth, this.lastWidth);
+    }
+
     const { nodes, edges } = this.filtered();
-    return graphScene(layout(nodes, edges, this.lastWidth), this.graph!.lines);
+    return graphScene(layout(nodes, edges, this.lastWidth), g.lines);
+  }
+
+  /**
+   * Where the trace starts: the method under the cursor if it calls anything,
+   * otherwise a detected entry point, otherwise whichever method calls the
+   * most. Following the cursor is what makes the view feel like it is
+   * answering a question you just asked.
+   */
+  private sequenceRoot(
+    g: RawGraph,
+    byCaller: Map<string, SeqCall[]>
+  ): SeqParticipant | undefined {
+    const byId = new Map(g.participants.map((p) => [p.id, p]));
+
+    const atCursor = g.participants.find(
+      (p) => p.clickLine !== undefined && p.clickLine === this.anchorLine
+    );
+    if (atCursor && byCaller.has(atCursor.id)) {
+      return atCursor;
+    }
+    const cursorEnclosing = g.participants.find(
+      (p) => p.id === this.enclosingId
+    );
+    if (cursorEnclosing && byCaller.has(cursorEnclosing.id)) {
+      return cursorEnclosing;
+    }
+    for (const id of g.entries) {
+      if (byCaller.has(id)) {
+        return byId.get(id);
+      }
+    }
+    let best: SeqParticipant | undefined;
+    let bestCount = 0;
+    for (const [id, calls] of byCaller) {
+      if (calls.length > bestCount) {
+        bestCount = calls.length;
+        best = byId.get(id);
+      }
+    }
+    return best || g.participants[0];
   }
 
   private async post(): Promise<void> {
@@ -317,6 +430,14 @@ export class GlanceMapPanel {
         <option value="flow">Data flow</option>
         <option value="modules">Modules</option>
       </select>
+      <label class="toggle" id="depthWrap" hidden>depth
+        <select id="depth">
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4" selected>4</option>
+          <option value="6">6</option>
+        </select>
+      </label>
       <label class="toggle"><input type="checkbox" id="ext"> External calls</label>
       <button id="fit" title="Fit to window">Fit</button>
       <button id="copy" title="Copy as Mermaid">Copy Mermaid</button>
@@ -331,16 +452,7 @@ export class GlanceMapPanel {
     <svg id="svg" hidden></svg>
   </div>
 
-  <footer class="legend" id="legend">
-    <span><i class="sw sw-node"></i>method</span>
-    <span><i class="sw sw-entry"></i>entry point</span>
-    <span><i class="sw sw-ext"></i>external</span>
-    <span><i class="sw sw-warn"></i>warning</span>
-    <span><i class="sw sw-err"></i>error</span>
-    <span><i class="sw sw-line"></i>calls</span>
-    <span><i class="sw sw-dash"></i>cross-file</span>
-    <span class="hint">width = method size · subtitle = side effects · click to open</span>
-  </footer>
+  <footer class="legend" id="legend"></footer>
 
   <script nonce="${n}" src="${js}"></script>
 </body>

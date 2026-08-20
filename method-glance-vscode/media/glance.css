@@ -263,3 +263,4 @@ select:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-off
 .node.role-param rect { stroke: var(--vscode-charts-blue, steelblue); }
 .node.role-sink rect { stroke: var(--vscode-charts-purple, mediumpurple); }
 .node.role-module rect { stroke-dasharray: none; }
+.sw-self { border: 1px solid var(--vscode-charts-lines, rgba(128,128,128,.8)); border-radius: 50%; }

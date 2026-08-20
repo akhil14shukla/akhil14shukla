@@ -16,6 +16,9 @@
   const extBox = /** @type {HTMLInputElement} */ (document.getElementById("ext"));
   const viewSel = /** @type {HTMLSelectElement} */ (document.getElementById("view"));
   const captionEl = document.getElementById("caption");
+  const depthSel = /** @type {HTMLSelectElement} */ (document.getElementById("depth"));
+  const depthWrap = document.getElementById("depthWrap");
+  const legendEl = document.getElementById("legend");
 
   /** @type {any} */ let current = null;
   const view = { x: 0, y: 0, k: 1 };
@@ -119,6 +122,7 @@
     }
 
     if (!nodes.length) {
+      renderLegend(scene);
       stateEl.textContent = scene.empty || "Nothing to show for this file.";
       stateEl.style.display = "";
       svg.hidden = true;
@@ -155,6 +159,8 @@
       el("text", { x: 16, y: d.y + 18, class: "divider-label" }, root).textContent =
         d.label;
     });
+
+    renderLegend(scene);
 
     const groups = [...new Set(nodes.map((n) => n.group).filter(Boolean))].sort();
 
@@ -280,6 +286,25 @@
     fit();
   }
 
+  /** The legend belongs to the view, so it is rebuilt with every scene. */
+  function renderLegend(scene) {
+    legendEl.textContent = "";
+    (scene.legend || []).forEach((item) => {
+      const span = document.createElement("span");
+      const sw = document.createElement("i");
+      sw.className = "sw " + item.swatch;
+      span.appendChild(sw);
+      span.appendChild(document.createTextNode(item.label));
+      legendEl.appendChild(span);
+    });
+    if (scene.hint) {
+      const hint = document.createElement("span");
+      hint.className = "hint";
+      hint.textContent = scene.hint;
+      legendEl.appendChild(hint);
+    }
+  }
+
   /** Highlight a node, everything it touches, and the edges between. */
   function trace(id) {
     const related = new Set([id]);
@@ -373,10 +398,12 @@
       width: Math.max(520, stage.clientWidth - 40),
       showExternal: extBox.checked,
       view: viewSel.value,
+      depth: Number(depthSel.value),
     });
   }
   extBox.addEventListener("change", requestLayout);
   viewSel.addEventListener("change", requestLayout);
+  depthSel.addEventListener("change", requestLayout);
 
   let resizeTimer = 0;
   window.addEventListener("resize", () => {
@@ -398,6 +425,7 @@
       extBox.checked = !!msg.meta.showExternal;
       if (msg.meta.view) viewSel.value = msg.meta.view;
       extBox.parentElement.hidden = msg.meta.view !== "graph";
+      depthWrap.hidden = msg.meta.view !== "sequence";
       render(msg.scene, msg.meta);
     }
   });

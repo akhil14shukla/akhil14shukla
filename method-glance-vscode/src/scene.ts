@@ -81,6 +81,12 @@ export interface Divider {
   label: string;
 }
 
+/** One legend entry. `swatch` is a CSS class on `media/glance.css`. */
+export interface LegendItem {
+  swatch: string;
+  label: string;
+}
+
 export interface Scene {
   kind: SceneKind;
   nodes: SceneNode[];
@@ -93,7 +99,22 @@ export interface Scene {
   caption?: string;
   /** Shown as a centred message when there is nothing to draw. */
   empty?: string;
+  /** Keyed to this view. A legend describing a different diagram is worse than
+   * none, so every view supplies its own. */
+  legend?: LegendItem[];
+  /** Right-aligned note on how to read the view. */
+  hint?: string;
 }
+
+export const GRAPH_LEGEND: LegendItem[] = [
+  { swatch: "sw-node", label: "method" },
+  { swatch: "sw-entry", label: "entry point" },
+  { swatch: "sw-ext", label: "external" },
+  { swatch: "sw-warn", label: "warning" },
+  { swatch: "sw-err", label: "error" },
+  { swatch: "sw-line", label: "calls" },
+  { swatch: "sw-dash", label: "cross-file" },
+];
 
 /** Wrap the call-graph layout in the common Scene shape. */
 export function graphScene(
@@ -102,6 +123,8 @@ export function graphScene(
 ): Scene {
   return {
     kind: "graph",
+    legend: GRAPH_LEGEND,
+    hint: "width = method size · subtitle = side effects · click to open",
     width: result.width,
     height: result.height,
     dividers:
