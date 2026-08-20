@@ -3,11 +3,13 @@ import { familyFor } from "./languages";
 import { GraphEdge, GraphNode, layout } from "./layout";
 import { toMermaid } from "./mermaid";
 import { siteContext } from "./callSite";
+import { ClassBox, InheritEdge, classScene, visibilityOf } from "./classLayout";
 import { methodAtLine } from "./model";
 import { graphScene, Scene, SceneKind } from "./scene";
 import { SeqCall, SeqParticipant, sequenceScene } from "./sequenceLayout";
-import { getModel, resolveCalls } from "./semantics";
-import { shapeSummary } from "./shape";
+import { getModel, resolveCalls, resolveTypes } from "./semantics";
+import { attributesIn, shapeSummary } from "./shape";
+import { typesFromSymbols, SymbolLike } from "./symbols";
 
 /** Cap on call-hierarchy requests for one map. Each method costs one round
  * trip, so a very large file is summarised rather than stalling the editor. */
@@ -26,6 +28,8 @@ interface RawGraph {
   participants: SeqParticipant[];
   /** Ids of methods that read as entry points. */
   entries: string[];
+  classes: ClassBox[];
+  inherits: InheritEdge[];
 }
 
 /** Highest diagnostic severity overlapping a line range: 2 error, 1 warning. */
@@ -128,6 +132,8 @@ async function buildGraph(doc: vscode.TextDocument): Promise<RawGraph> {
     }
   );
 
+  const { classes, inherits } = await buildClasses(doc);
+
   nodes.push(...externals.values());
 
   return {
@@ -140,7 +146,93 @@ async function buildGraph(doc: vscode.TextDocument): Promise<RawGraph> {
     seqCalls,
     participants,
     entries,
+    classes,
+    inherits,
   };
+}
+
+/**
+ * Classes with their members. Methods come from the model; attributes are
+ * harvested from `self.`/`this.` assignments, which no symbol provider reports
+ * reliably across languages.
+ */
+async function buildClasses(
+  doc: vscode.TextDocument
+): Promise<{ classes: ClassBox[]; inherits: InheritEdge[] }> {
+  const model = await getModel(doc);
+  const family = familyFor(doc.languageId);
+  const lines = doc.getText().split(/\r\n|\r|\n/);
+
+  const symbols = await vscode.commands
+    .executeCommand<SymbolLike[]>(
+      "vscode.executeDocumentSymbolProvider",
+      doc.uri
+    )
+    .then(
+      (s) => s || [],
+      () => [] as SymbolLike[]
+    );
+
+  const declared = typesFromSymbols(symbols);
+  const byName = new Map<string, ClassBox>();
+
+  for (const t of declared) {
+    byName.set(t.name, {
+      name: t.name,
+      clickLine: t.line,
+      members: [],
+    });
+  }
+
+  // Methods, grouped by the container the model already recorded.
+  for (const m of model.methods) {
+    if (!m.container) {
+      continue;
+    }
+    let box = byName.get(m.container);
+    if (!box) {
+      box = { name: m.container, members: [] };
+      byName.set(m.container, box);
+    }
+    box.members.push({
+      name: m.name,
+      visibility: visibilityOf(m.name),
+      kind: "method",
+      clickLine: m.selectionLine,
+      effects: m.shape?.effects,
+    });
+  }
+
+  // Attributes assigned anywhere inside the class body.
+  for (const t of declared) {
+    const box = byName.get(t.name);
+    if (!box) {
+      continue;
+    }
+    const own = model.methods.filter((m) => m.container === t.name);
+    const from = own.length ? Math.min(...own.map((m) => m.range.start)) : t.line;
+    const to = own.length ? Math.max(...own.map((m) => m.range.end)) : t.line;
+    for (const name of attributesIn(lines.slice(from, to + 1), family)) {
+      box.members.unshift({
+        name,
+        visibility: visibilityOf(name),
+        kind: "attribute",
+      });
+    }
+  }
+
+  const inherits: InheritEdge[] = [];
+  const typeEdges = await resolveTypes(doc, declared);
+  for (const e of typeEdges) {
+    inherits.push({ from: e.from, to: e.to });
+    if (!byName.has(e.to)) {
+      // Supertype defined elsewhere: shown as an empty dashed box so the
+      // hierarchy is not silently cut off at the file boundary.
+      byName.set(e.to, { name: e.to, members: [], external: true });
+    }
+  }
+
+  return { classes: [...byName.values()], inherits };
 }
 
 function nonce(): string {
@@ -333,6 +425,10 @@ export class GlanceMapPanel {
         };
       }
       return sequenceScene(root, parts, byCaller, this.depth, this.lastWidth);
+    }
+
+    if (this.view === "classes") {
+      return classScene(g.classes, g.inherits, this.lastWidth);
     }
 
     const { nodes, edges } = this.filtered();

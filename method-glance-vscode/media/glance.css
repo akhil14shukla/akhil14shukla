@@ -264,3 +264,8 @@ select:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-off
 .node.role-sink rect { stroke: var(--vscode-charts-purple, mediumpurple); }
 .node.role-module rect { stroke-dasharray: none; }
 .sw-self { border: 1px solid var(--vscode-charts-lines, rgba(128,128,128,.8)); border-radius: 50%; }
+
+/* `hidden` is a presentation hint that any `display` rule overrides — and the
+   toolbar controls set `display: inline-flex`, so hiding them silently failed.
+   This makes the attribute authoritative. */
+[hidden] { display: none !important; }

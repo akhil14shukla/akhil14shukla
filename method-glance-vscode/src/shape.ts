@@ -293,6 +293,36 @@ export function annotateShapes(
   }
 }
 
+/**
+ * Instance attributes assigned anywhere in a range — `self.x = …` in Python,
+ * `this.x = …` in the C family. Reported in first-assignment order, which is
+ * usually declaration order in `__init__`/the constructor.
+ *
+ * Read from literal-stripped code so an assignment inside a string is not
+ * mistaken for a real one.
+ */
+export function attributesIn(
+  lines: string[],
+  family: LanguageFamily
+): string[] {
+  const code = cleanCodeLines(lines, family);
+  const re =
+    family === "python"
+      ? /\bself\.([A-Za-z_]\w*)\s*(?:[-+*/|&]?=)(?!=)/g
+      : /\bthis\.([A-Za-z_$][\w$]*)\s*(?:[-+*/|&]?=)(?!=)/g;
+  const seen: string[] = [];
+  for (const line of code) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(line)) !== null) {
+      if (!seen.includes(m[1])) {
+        seen.push(m[1]);
+      }
+    }
+  }
+  return seen;
+}
+
 /** Compact one-line summary for an inline editor annotation. */
 export function shapeSummary(s: MethodShape): string {
   const bits: string[] = [];
