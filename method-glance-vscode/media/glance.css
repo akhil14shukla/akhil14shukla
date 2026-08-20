@@ -269,3 +269,5 @@ select:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-off
    toolbar controls set `display: inline-flex`, so hiding them silently failed.
    This makes the attribute authoritative. */
 [hidden] { display: none !important; }
+.sw-param { border: 1.5px solid var(--vscode-charts-blue, steelblue); }
+.sw-sink { border: 1.5px solid var(--vscode-charts-purple, mediumpurple); }

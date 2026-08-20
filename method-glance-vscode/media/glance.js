@@ -125,11 +125,11 @@
       renderLegend(scene);
       stateEl.textContent = scene.empty || "Nothing to show for this file.";
       stateEl.style.display = "";
-      svg.hidden = true;
+      svg.setAttribute("hidden", "");
       return;
     }
     stateEl.style.display = "none";
-    svg.hidden = false;
+    svg.removeAttribute("hidden");
 
     const root = el("g", { id: "root" }, svg);
 
@@ -418,7 +418,7 @@
     if (msg.type === "loading") {
       stateEl.textContent = "Resolving calls…";
       stateEl.style.display = "";
-      svg.hidden = true;
+      svg.setAttribute("hidden", "");
       return;
     }
     if (msg.type === "render") {

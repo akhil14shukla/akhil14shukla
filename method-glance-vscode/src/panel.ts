@@ -4,6 +4,8 @@ import { GraphEdge, GraphNode, layout } from "./layout";
 import { toMermaid } from "./mermaid";
 import { siteContext } from "./callSite";
 import { ClassBox, InheritEdge, classScene, visibilityOf } from "./classLayout";
+import { analyzeFlow } from "./dataflow";
+import { flowScene } from "./flowLayout";
 import { methodAtLine } from "./model";
 import { graphScene, Scene, SceneKind } from "./scene";
 import { SeqCall, SeqParticipant, sequenceScene } from "./sequenceLayout";
@@ -431,8 +433,47 @@ export class GlanceMapPanel {
       return classScene(g.classes, g.inherits, this.lastWidth);
     }
 
+    if (this.view === "flow") {
+      return this.flowSceneForCursor();
+    }
+
     const { nodes, edges } = this.filtered();
     return graphScene(layout(nodes, edges, this.lastWidth), g.lines);
+  }
+
+  /**
+   * Data flow describes one method, so it follows the cursor. Without a method
+   * under the caret there is nothing meaningful to show — saying so beats
+   * picking one arbitrarily.
+   */
+  private async flowSceneForCursor(): Promise<Scene> {
+    const doc = this.docUri
+      ? await vscode.workspace.openTextDocument(this.docUri)
+      : undefined;
+    const model = doc ? await getModel(doc) : undefined;
+    const method =
+      model && doc ? methodAtLine(model.methods, this.anchorLine) : undefined;
+
+    if (!doc || !method) {
+      return {
+        kind: "flow",
+        nodes: [],
+        edges: [],
+        width: this.lastWidth,
+        height: 200,
+        empty:
+          "Put the cursor inside a method.\nThe data-flow view follows one method's parameters to where they end up.",
+      };
+    }
+
+    const family = familyFor(doc.languageId);
+    const lines = doc.getText().split(/\r\n|\r|\n/);
+    const signature = lines
+      .slice(method.selectionLine, method.foldStart + 1)
+      .join(" ");
+    const body = lines.slice(method.foldStart + 1, method.range.end + 1);
+    const flow = analyzeFlow(signature, body, method.foldStart + 1, family);
+    return flowScene(method.name, flow, this.lastWidth);
   }
 
   /**
