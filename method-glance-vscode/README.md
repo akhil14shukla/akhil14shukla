@@ -92,6 +92,22 @@ because "where does this start" is the first question in an unfamiliar file.
 Node width tracks method size, the subtitle shows side effects, dashed edges
 cross file boundaries, and `Copy Mermaid` exports the diagram as text for a PR.
 
+The panel holds five diagrams, chosen from the toolbar:
+
+| View | Answers |
+| --- | --- |
+| **Call graph** | what calls what |
+| **Sequence** | what happens when this runs, from the method at your cursor |
+| **Classes** | types with their attributes, methods and inheritance |
+| **Data flow** | where one method's parameters end up |
+| **Modules** | what this file imports, weighted by calls that actually land there |
+
+Three of these infer rather than resolve, and each says so in its own caption.
+The sequence view shows *static* call order, not a runtime trace — calls inside
+a branch are marked `?` and inside a loop `✻`. Data flow follows values by name
+and cannot see a value stored in a container. The module map dashes imports it
+never saw called.
+
 ## Language support
 
 **Python** is the primary target and gets the most precise handling:

@@ -6,6 +6,8 @@ import { siteContext } from "./callSite";
 import { ClassBox, InheritEdge, classScene, visibilityOf } from "./classLayout";
 import { analyzeFlow } from "./dataflow";
 import { flowScene } from "./flowLayout";
+import { ImportedModule, moduleForUri, parseImports } from "./modules";
+import { moduleScene } from "./moduleLayout";
 import { methodAtLine } from "./model";
 import { graphScene, Scene, SceneKind } from "./scene";
 import { SeqCall, SeqParticipant, sequenceScene } from "./sequenceLayout";
@@ -32,6 +34,7 @@ interface RawGraph {
   entries: string[];
   classes: ClassBox[];
   inherits: InheritEdge[];
+  modules: ImportedModule[];
 }
 
 /** Highest diagnostic severity overlapping a line range: 2 error, 1 warning. */
@@ -136,6 +139,22 @@ async function buildGraph(doc: vscode.TextDocument): Promise<RawGraph> {
 
   const { classes, inherits } = await buildClasses(doc);
 
+  // Imports as written, then weighted by the cross-file calls already resolved
+  // during the graph build — no extra language-server requests.
+  const modules = parseImports(doc.getText(), family);
+  for (const m of model.methods) {
+    for (const c of model.calls.filter((e) => e.from === m.id)) {
+      if (!c.externalUri) {
+        continue;
+      }
+      const name = moduleForUri(c.externalUri, modules);
+      const hit = modules.find((x) => x.name === name);
+      if (hit) {
+        hit.calls += c.atLines.length;
+      }
+    }
+  }
+
   nodes.push(...externals.values());
 
   return {
@@ -150,6 +169,7 @@ async function buildGraph(doc: vscode.TextDocument): Promise<RawGraph> {
     entries,
     classes,
     inherits,
+    modules,
   };
 }
 
@@ -435,6 +455,10 @@ export class GlanceMapPanel {
 
     if (this.view === "flow") {
       return this.flowSceneForCursor();
+    }
+
+    if (this.view === "modules") {
+      return moduleScene(g.file, g.modules, this.lastWidth);
     }
 
     const { nodes, edges } = this.filtered();

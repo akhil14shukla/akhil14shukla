@@ -271,3 +271,6 @@ select:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-off
 [hidden] { display: none !important; }
 .sw-param { border: 1.5px solid var(--vscode-charts-blue, steelblue); }
 .sw-sink { border: 1.5px solid var(--vscode-charts-purple, mediumpurple); }
+.sw-local { border: 1.5px solid var(--vscode-charts-blue, steelblue); }
+.sw-third { border: 1.5px solid var(--vscode-charts-orange, darkorange); }
+.sw-std { border: 1.5px solid var(--vscode-charts-green, seagreen); }

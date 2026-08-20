@@ -37,12 +37,14 @@
   ];
   const FALLBACK = ["#4c8bf5", "#a970d0", "#3fa46a", "#d98a3a", "#d0b23a", "#cc5f5f"];
 
-  function groupColor(group, groups) {
+  function groupColor(group, groups, pinned) {
     if (!group) {
       return "transparent";
     }
+    // A view may pin colours where the group means something; otherwise cycle.
     const i = groups.indexOf(group);
-    const varName = GROUP_COLORS[i % GROUP_COLORS.length];
+    const varName =
+      (pinned && pinned[group]) || GROUP_COLORS[i % GROUP_COLORS.length];
     const resolved = getComputedStyle(document.documentElement)
       .getPropertyValue(varName)
       .trim();
@@ -234,7 +236,8 @@
       if (n.group) {
         el("line", {
           x1: n.x + 1.5, y1: n.y + 7, x2: n.x + 1.5, y2: n.y + n.h - 7,
-          class: "rail", stroke: groupColor(n.group, groups),
+          class: "rail",
+          stroke: groupColor(n.group, groups, scene.groupColors),
         }, g);
       }
 

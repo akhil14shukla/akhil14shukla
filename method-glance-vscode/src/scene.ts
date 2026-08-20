@@ -104,6 +104,15 @@ export interface Scene {
   legend?: LegendItem[];
   /** Right-aligned note on how to read the view. */
   hint?: string;
+  /**
+   * Fixed colour per group, as a VS Code theme variable name.
+   *
+   * Grouping is arbitrary in some views (which class a method sits in) and
+   * meaningful in others (whether a module is local or third-party). Where it
+   * is meaningful the colour has to be pinned, or the rails stop agreeing with
+   * the legend.
+   */
+  groupColors?: Record<string, string>;
 }
 
 export const GRAPH_LEGEND: LegendItem[] = [

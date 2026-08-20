@@ -111,40 +111,37 @@ Entry points — `main`, route/CLI/task decorators, `test_` prefixes — are det
 too. In a strange file, "where does this start" is the first question, and the
 map marks those nodes.
 
-## Visual roadmap
+## Views
 
-Everything renders from the same model. Ordered by value per unit of work.
+All five render to one `Scene` (`src/scene.ts`) — boxes, polylines, lanes,
+dividers — so the webview holds no per-view code and a new diagram is a layout
+function plus a test.
 
-### Built
+| View | Answers | Source |
+| --- | --- | --- |
+| Call graph | what calls what | call hierarchy |
+| Sequence | what happens when this runs | call hierarchy, followed depth-first |
+| Classes | what types exist and what they hold | type hierarchy + symbols |
+| Data flow | where one method's parameters end up | text def-use, heuristic |
+| Modules | what this file reaches outside itself | imports + cross-file call edges |
 
-- **Glance Map panel** — call graph, click to jump, hover to trace.
-- **Logic skeleton** — inline in the editor and in map subtitles.
-- **Entry points** — marked in the map.
-- **Mermaid export.**
+Each view supplies its own legend and caption. A legend describing a different
+diagram is worse than no legend, and every view that infers rather than resolves
+says so in its caption.
 
-### Still ahead
+### Where each view is approximate
 
-### 1. Sequence view
+Being explicit about this is the point, since three of the five infer:
 
-Pick an entry point, walk `provideOutgoingCalls` breadth-first to a depth limit,
-render lifelines in call order. This is the view that answers "what actually
-happens when this runs" — the thing a folded file still cannot show.
+- **Sequence** is *static* call order, not a runtime trace. Calls inside a
+  branch or loop are detected from their enclosing blocks and marked `?` / `✻`.
+- **Data flow** follows values by name through assignments. It cannot see a
+  value stored in a container or reassigned on only one branch.
+- **Modules** weight edges by *resolved* calls; a dashed edge means imported but
+  never called here, which may mean unused or merely unresolvable.
 
-### 2. Class diagram
-
-`prepareTypeHierarchy` + `provideSupertypes` across the file's classes, with
-methods grouped under their owner. Cheap once the type edges exist.
-
-### 3. Data-flow view
-
-Which parameters reach which calls. The remaining question the skeleton does not
-answer: not *what* a function touches, but *how the values move through it*.
-Needs real expression-level analysis, so it is the most expensive item here.
-
-### 4. Module map
-
-Fan out one hop through cross-file call edges to show which modules this file
-actually reaches. The only view that needs multi-document resolution.
+The call graph and class diagram are exact wherever the language server answers,
+and badge themselves `text fallback` when it does not.
 
 ### Rendering choice
 
