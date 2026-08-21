@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { familyFor } from "./languages";
 import { GraphEdge, GraphNode, layout } from "./layout";
-import { toMermaid } from "./mermaid";
+import { toMermaid, toMermaidClasses, toMermaidSequence } from "./mermaid";
 import { siteContext } from "./callSite";
 import { ClassBox, InheritEdge, classScene, visibilityOf } from "./classLayout";
 import { analyzeFlow } from "./dataflow";
@@ -284,9 +284,12 @@ export class GlanceMapPanel {
   /** How far the sequence trace follows calls. */
   private depth = 4;
 
-  static show(context: vscode.ExtensionContext): void {
+  static show(context: vscode.ExtensionContext, view?: SceneKind): void {
     const column = vscode.ViewColumn.Beside;
     if (GlanceMapPanel.current) {
+      if (view) {
+        GlanceMapPanel.current.view = view;
+      }
       GlanceMapPanel.current.panel.reveal(column, true);
       void GlanceMapPanel.current.refresh();
       return;
@@ -302,6 +305,20 @@ export class GlanceMapPanel {
       }
     );
     GlanceMapPanel.current = new GlanceMapPanel(panel, context);
+    if (view) {
+      GlanceMapPanel.current.view = view;
+      void GlanceMapPanel.current.refresh();
+    }
+  }
+
+  /** Copy the diagram currently on screen, in Mermaid syntax. */
+  static async copyCurrent(): Promise<boolean> {
+    const panel = GlanceMapPanel.current;
+    if (!panel || !panel.graph) {
+      return false;
+    }
+    await vscode.env.clipboard.writeText(panel.mermaidForView());
+    return true;
   }
 
   private constructor(
@@ -381,10 +398,10 @@ export class GlanceMapPanel {
     }
 
     if (msg.type === "copyMermaid" && this.graph) {
-      const { nodes, edges } = this.filtered();
-      await vscode.env.clipboard.writeText(toMermaid(nodes, edges));
+      const text = this.mermaidForView();
+      await vscode.env.clipboard.writeText(text);
       void vscode.window.showInformationMessage(
-        "Method Glance: Mermaid diagram copied to clipboard"
+        `Method Glance: ${this.view} diagram copied as Mermaid`
       );
       return;
     }
@@ -392,6 +409,61 @@ export class GlanceMapPanel {
     if (msg.type === "refresh") {
       await this.refresh();
     }
+  }
+
+  /**
+   * Export whatever the user is looking at. This previously always emitted the
+   * call graph, so copying from the sequence or class view silently handed over
+   * a diagram of something else.
+   */
+  private mermaidForView(): string {
+    const g = this.graph!;
+
+    if (this.view === "sequence") {
+      const parts = new Map(g.participants.map((p) => [p.id, p]));
+      const byCaller = this.callsByCaller();
+      const root = this.sequenceRoot(g, byCaller);
+      return root
+        ? toMermaidSequence(root.id, parts, byCaller, this.depth)
+        : "sequenceDiagram";
+    }
+
+    if (this.view === "classes") {
+      return toMermaidClasses(g.classes, g.inherits);
+    }
+
+    if (this.view === "modules") {
+      const nodes: GraphNode[] = [
+        { id: "__self__", label: g.file },
+        ...g.modules.map((m) => ({
+          id: m.name,
+          label: m.name,
+          group: m.kind,
+        })),
+      ];
+      const edges: GraphEdge[] = g.modules.map((m) => ({
+        from: "__self__",
+        to: m.name,
+        count: m.calls,
+        cross: m.calls === 0,
+      }));
+      return toMermaid(nodes, edges);
+    }
+
+    // Graph and flow both read well as a flowchart.
+    const { nodes, edges } = this.filtered();
+    return toMermaid(nodes, edges);
+  }
+
+  private callsByCaller(): Map<string, SeqCall[]> {
+    const byCaller = new Map<string, SeqCall[]>();
+    for (const c of this.graph!.seqCalls) {
+      if (!byCaller.has(c.from)) {
+        byCaller.set(c.from, []);
+      }
+      byCaller.get(c.from)!.push(c);
+    }
+    return byCaller;
   }
 
   private filtered(): { nodes: GraphNode[]; edges: GraphEdge[] } {
@@ -428,13 +500,7 @@ export class GlanceMapPanel {
 
     if (this.view === "sequence") {
       const parts = new Map(g.participants.map((p) => [p.id, p]));
-      const byCaller = new Map<string, SeqCall[]>();
-      for (const c of g.seqCalls) {
-        if (!byCaller.has(c.from)) {
-          byCaller.set(c.from, []);
-        }
-        byCaller.get(c.from)!.push(c);
-      }
+      const byCaller = this.callsByCaller();
       const root = this.sequenceRoot(g, byCaller);
       if (!root) {
         return {

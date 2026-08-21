@@ -158,9 +158,23 @@ model behind lazy call resolution, and the roadmap for diagram views.
 
 ```bash
 npm install
-npm run compile     # type-check and build to out/
-npm test            # compile, then run the parser test suite
+npm run compile          # type-check and build to out/
+npm test                 # unit tests (plain Node, no editor needed)
+npm run test:functional  # downloads VS Code and runs the extension inside it
 ```
+
+The functional suite launches a real VS Code and drives the extension: folding,
+the fold/unfold commands' effect on `visibleRanges`, hover, call hierarchy, the
+map panel in every view, and Mermaid export. The TypeScript fixture exercises
+the *semantic* path — VS Code ships TS language features, so symbols and call
+hierarchy are real — while the Python fixture has no language extension
+installed and so exercises the text fallback. Both paths are covered by choosing
+the file.
+
+Two bugs that only a running editor could find, both now guarded by tests: the
+manifest's `main` pointed at a path the build never produced, so the extension
+could not load at all; and effect detection matched bare method names, labelling
+`Map.get` a network call.
 
 Press `F5` in VS Code to launch an Extension Development Host with the
 extension loaded.

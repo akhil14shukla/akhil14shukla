@@ -109,6 +109,37 @@ const tern = analyzeShape(["  const v = a ? b : c;", "  const w = x?.y ?? z;"], 
 ok("ternary counts as a branch", tern.branches === 1, `got ${tern.branches}`);
 
 // ---------------------------------------------------------------------------
+// Effect precision — collection calls must not read as I/O
+//
+// Found by looking at the map for a real TypeScript file: `Map.get` was
+// labelled a network call and `Map.delete` a database write, because the
+// patterns matched bare method names. A false effect is worse than no effect.
+// ---------------------------------------------------------------------------
+
+const eff = (body: string[], family: "python" | "brace" = "python") =>
+  analyzeShape(body, family).effects;
+
+ok("Map.get is not a network call", eff(["  return this.store.get(key);"], "brace").length === 0,
+   JSON.stringify(eff(["  return this.store.get(key);"], "brace")));
+ok("Map.delete is not a database write", eff(["  this.store.delete(k);"], "brace").length === 0,
+   JSON.stringify(eff(["  this.store.delete(k);"], "brace")));
+ok("Map.set is not an effect", eff(["  this.store.set(k, v);"], "brace").length === 0);
+ok("Array.find is not a query", eff(["  return items.find(x => x.id);"], "brace").length === 0);
+ok("dict.update is not a database write", eff(["    self.opts.update(other)"]).length === 0);
+ok("list.insert is not a database write", eff(["    items.insert(0, x)"]).length === 0);
+
+// True positives must survive the tightening.
+ok("requests.get is still net", eff(["    return requests.get(url)"]).includes("net"));
+ok("axios.post is still net", eff(["  return axios.post(u, b);"], "brace").includes("net"));
+ok("fetch is still net", eff(["  return fetch(u);"], "brace").includes("net"));
+ok("cursor.execute is still db", eff(['    cur.execute("SELECT 1")']).includes("db"));
+ok("db.commit is still db", eff(["    self._db.commit()"]).includes("db"));
+ok("orm queryset is still db", eff(["    return Order.objects.filter(id=1)"]).includes("db"));
+ok("open() is still io", eff(["    with open(p) as f:"]).includes("io"));
+ok("logger is still log", eff(['    logger.info("x")']).includes("log"));
+ok("subprocess is still proc", eff(["    subprocess.run(cmd)"]).includes("proc"));
+
+// ---------------------------------------------------------------------------
 // Entry points
 // ---------------------------------------------------------------------------
 

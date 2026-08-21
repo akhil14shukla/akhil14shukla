@@ -77,6 +77,12 @@ export interface GlanceModel {
   types: TypeEdge[];
   /** True when methods came from the language server rather than the parsers. */
   semantic: boolean;
+  /**
+   * Method ids whose outgoing calls have been resolved. Needed because "no
+   * calls" is a real answer: without it, every call-less method re-queried the
+   * language server on every hover, decoration pass and panel refresh.
+   */
+  resolved: Set<string>;
 }
 
 export function methodId(

@@ -34,14 +34,35 @@ export interface MethodShape {
   entry: boolean;
 }
 
-/** Matched against literal-stripped code, so a URL in a string cannot trip `net`. */
+/**
+ * Matched against literal-stripped code.
+ *
+ * These require a *recognisable receiver or library*, never a bare method name.
+ * An earlier version matched `.get(`, `.delete(`, `.find(` and `.update(`
+ * anywhere, which labelled every `Map.get` as a network call and every
+ * `Array.find` as a database query — noise that is worse than no label at all.
+ * Precision is the right trade here: missing an exotic ORM costs less than
+ * telling someone their cache lookup talks to the network.
+ */
 const EFFECT_PATTERNS: [Effect, RegExp][] = [
-  ["io", /\b(open|read_text|write_text|readlines?|writelines?|Path|shutil|readFileSync|writeFileSync|createReadStream)\s*\(|\.\s*(read|write|readline|close)\s*\(/],
-  ["net", /\b(requests|urllib|httpx|aiohttp|socket|fetch|axios|XMLHttpRequest|WebSocket)\b|\.\s*(get|post|put|patch|delete)\s*\(/],
-  ["db", /\b(cursor|execute|executemany|commit|rollback|session|queryset|objects)\b|\.\s*(query|save|insert|update|delete|find|aggregate)\s*\(/],
+  [
+    "io",
+    /\b(open|Path|shutil|readFileSync|writeFileSync|appendFileSync|createReadStream|createWriteStream|read_text|write_text|readlines|writelines)\s*\(|\b(os\.path|pathlib)\b|\.\s*(write|writelines|readline)\s*\(/,
+  ],
+  [
+    "net",
+    /\b(requests|urllib|httpx|aiohttp|socket|axios|XMLHttpRequest|WebSocket|urlopen)\b|\bfetch\s*\(|\b(requests|httpx|axios|http|https|client|api)\s*\.\s*(get|post|put|patch|delete|head)\s*\(/,
+  ],
+  [
+    "db",
+    /\b(cursor|execute|executemany|commit|rollback|queryset|sessionmaker)\b|\b(db|database|conn|connection|session)\s*\.\s*\w+\s*\(|\.objects\.\w+\s*\(/,
+  ],
   ["proc", /\b(subprocess|popen|spawn|execFile|os\.system|child_process)\b/i],
   ["log", /\b(print|logging|logger|console|warnings)\b/],
-  ["time", /\b(sleep|perf_counter|monotonic|datetime|Date\.now|setTimeout|setInterval)\b|\btime\./],
+  [
+    "time",
+    /\b(sleep|perf_counter|monotonic|datetime|Date\.now|setTimeout|setInterval)\b|\btime\./,
+  ],
   ["random", /\b(random|uuid|secrets|shuffle|Math\.random)\b/],
 ];
 

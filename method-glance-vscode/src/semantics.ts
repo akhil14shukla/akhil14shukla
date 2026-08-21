@@ -100,6 +100,7 @@ export async function getModel(
     methods,
     calls: [],
     types: [],
+    resolved: new Set<string>(),
     semantic,
   };
   cache.set(key, model);
@@ -130,9 +131,8 @@ export async function resolveCalls(
   method: MethodNode
 ): Promise<CallEdge[]> {
   const model = await getModel(doc);
-  const existing = model.calls.filter((c) => c.from === method.id);
-  if (existing.length) {
-    return existing;
+  if (model.resolved.has(method.id)) {
+    return model.calls.filter((c) => c.from === method.id);
   }
 
   const pos = new vscode.Position(
@@ -142,11 +142,13 @@ export async function resolveCalls(
 
   const items = await safe<HierarchyItem[]>(CMD.prepareCall, doc.uri, pos);
   if (!items || !items.length) {
+    model.resolved.add(method.id);
     return [];
   }
 
   const outgoing = await safe<OutgoingCall[]>(CMD.outgoing, items[0]);
   if (!outgoing) {
+    model.resolved.add(method.id);
     return [];
   }
 
@@ -167,6 +169,7 @@ export async function resolveCalls(
   }
 
   model.calls.push(...edges);
+  model.resolved.add(method.id);
   return edges;
 }
 

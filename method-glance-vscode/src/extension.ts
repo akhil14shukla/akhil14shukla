@@ -3,6 +3,7 @@ import { familyFor, supportedLanguageIds } from "./languages";
 import { GlanceHoverProvider } from "./hover";
 import { MethodNode } from "./model";
 import { GlanceMapPanel } from "./panel";
+import { SceneKind } from "./scene";
 import { getModel, invalidate, resolveCalls } from "./semantics";
 import { MethodShape, shapeSummary } from "./shape";
 
@@ -64,6 +65,24 @@ function shapeHover(name: string, s: MethodShape): vscode.MarkdownString {
     md.appendMarkdown("\n\n_High complexity \u2014 consider splitting._");
   }
   return md;
+}
+
+/**
+ * Rebuilding the model means a symbol-provider round trip, so annotations are
+ * debounced. Without this every keystroke re-parsed the file and re-queried the
+ * language server.
+ */
+const SHAPE_DEBOUNCE_MS = 250;
+let shapeTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleShapes(editor: vscode.TextEditor): void {
+  if (shapeTimer) {
+    clearTimeout(shapeTimer);
+  }
+  shapeTimer = setTimeout(() => {
+    shapeTimer = undefined;
+    void decorateShapes(editor);
+  }, SHAPE_DEBOUNCE_MS);
 }
 
 async function decorateShapes(editor: vscode.TextEditor): Promise<void> {
@@ -183,8 +202,20 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("methodGlance.unfold", () => {
       void vscode.commands.executeCommand("editor.unfoldAll");
     }),
-    vscode.commands.registerCommand("methodGlance.showMap", () => {
-      GlanceMapPanel.show(context);
+    vscode.commands.registerCommand(
+      "methodGlance.showMap",
+      (view?: SceneKind) => {
+        GlanceMapPanel.show(context, view);
+      }
+    ),
+    vscode.commands.registerCommand("methodGlance.copyDiagram", async () => {
+      const copied = await GlanceMapPanel.copyCurrent();
+      vscode.window.setStatusBarMessage(
+        copied
+          ? "Method Glance: diagram copied as Mermaid"
+          : "Method Glance: open the Glance Map first",
+        3000
+      );
     })
   );
 
@@ -194,7 +225,7 @@ export function activate(context: vscode.ExtensionContext): void {
       invalidate(e.document.uri);
       const editor = vscode.window.activeTextEditor;
       if (editor && editor.document === e.document) {
-        void decorateShapes(editor);
+        scheduleShapes(editor);
       }
     })
   );
@@ -220,5 +251,8 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  /* nothing to clean up */
+  if (shapeTimer) {
+    clearTimeout(shapeTimer);
+    shapeTimer = undefined;
+  }
 }

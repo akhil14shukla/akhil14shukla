@@ -16,6 +16,34 @@ const root = path.join(__dirname, "..", "..");
 const js = fs.readFileSync(path.join(root, "media", "glance.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "media", "glance.css"), "utf8");
 const panel = fs.readFileSync(path.join(root, "src", "panel.ts"), "utf8");
+const manifest = JSON.parse(
+  fs.readFileSync(path.join(root, "package.json"), "utf8")
+);
+
+// The entry point the manifest names must actually exist after a build. A wrong
+// `main` means the extension never loads at all, and nothing else can catch it
+// short of launching an editor.
+ok(
+  "package.json main points at a file that exists",
+  fs.existsSync(path.join(root, manifest.main)),
+  `main = ${manifest.main}`
+);
+
+// Every contributed command must be registered by the extension source.
+const extension = fs.readFileSync(path.join(root, "src", "extension.ts"), "utf8");
+const contributed: string[] = (manifest.contributes?.commands || []).map(
+  (c: { command: string }) => c.command
+);
+const unregistered = contributed.filter((c) => !extension.includes(`"${c}"`));
+ok("every contributed command is registered", unregistered.length === 0,
+   `missing: ${unregistered.join(", ")}`);
+
+// Files the packaged extension needs must not be excluded from the VSIX.
+const vscodeignore = fs.readFileSync(path.join(root, ".vscodeignore"), "utf8");
+ok("build output is not excluded from the package",
+   !/^out\/?\s*$|^out\/\*\*/m.test(vscodeignore));
+ok("media assets are not excluded from the package",
+   !/^media/m.test(vscodeignore));
 
 // `hidden` is an HTMLElement property. SVGElement does not implement it, so
 // `svg.hidden = false` sets a JS expando and leaves the attribute in place —
