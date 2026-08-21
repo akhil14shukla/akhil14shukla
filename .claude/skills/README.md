@@ -1,6 +1,6 @@
 # Engineering skills
 
-Eight skills that carry a consistent engineering standard into every coding
+Nine skills that carry a consistent engineering standard into every coding
 session, so it does not have to be re-typed as a prompt each time. They are
 written to be usable by any model: concrete rules with the reasoning attached,
 worked before/after examples, decision tables, and executable scripts for the
@@ -28,6 +28,7 @@ repeating them, so only what is relevant loads.
 | **code-craft** | Any other language: naming, function shape, control flow, errors, state, when to rewrite | Writing or refactoring TS/JS, Go, Rust, Java, C#, Ruby, shell, SQL |
 | **testing-craft** | What to test, AAA structure, determinism, mocking discipline, edge cases, coverage as diagnostic | Writing, fixing, or reviewing tests |
 | **perf-engineering** | Measure-first method, design-time performance, complexity, N+1 and I/O, caching, memory, cost | Something is slow, expensive, or memory-hungry; designing something whose speed matters |
+| **ground-truth-analysis** | Comparing numbers against a reference: the comparison contract, layered checks, hypotheses and their tests, adversarial review, the closing bridge | "do these match", reconciling a sheet or export against a source of truth, explaining why totals disagree |
 | **docs-craft** | README, CONTRIBUTING, CHANGELOG, docstrings, ADRs, `docs/` by Diátaxis mode | Writing documentation, or finishing something someone else will use |
 | **ship-quality** | Self-review, running the repo's gates, security sweep, Conventional Commits, PR description, honest reporting | Before committing, before a PR, "is this ready" |
 
@@ -37,7 +38,7 @@ alongside, `ship-quality` to finish.
 
 ## Bundled scripts
 
-Four things that are reconstructed from memory badly, made deterministic:
+Five things that are reconstructed from memory badly, made deterministic:
 
 ```bash
 # Generate a complete, correct starting tree (python | node | go | rust)
@@ -47,11 +48,18 @@ python repo-architect/scripts/scaffold.py --name my-project --lang python --kind
 ./ship-quality/scripts/run_repo_checks.sh --list    # show what it would run
 ./ship-quality/scripts/run_repo_checks.sh           # run them, report each
 
+# Reconcile two tables and print a bridge that closes to zero
+python ground-truth-analysis/scripts/reconcile.py --truth ledger.csv \
+    --candidate export.xlsx --key order_id --value amount
+
 # Keep the suite itself honest
 python context_cost.py --detail      # what each level costs, per file
 python validate.py                   # routing, budgets, frontmatter, fences
 ```
 
+`reconcile.py` is stdlib-only and uses exact decimal arithmetic, so a float
+artefact never gets reported as a finding; it decomposes the total gap into
+missing rows, extra rows, and value differences that sum back to it exactly.
 `run_repo_checks.sh` never invents commands — it reads the Makefile,
 `package.json` scripts, `pyproject.toml`, `go.mod`, and `Cargo.toml`, so what
 passes locally is what CI runs. `validate.py` exits non-zero on a broken route,
@@ -81,7 +89,7 @@ can invoke one directly: `/repo-architect`, `/python-engineering`, and so on.
 <skill>/
 ├── SKILL.md          standing rules + a routing table — loads on trigger
 ├── references/       task-shaped depth, loaded only when routed to
-├── assets/           templates to fill in (docs-craft)
+├── assets/           templates to fill in (docs-craft, ground-truth-analysis)
 └── scripts/          executable, deterministic work
 ```
 
@@ -111,12 +119,12 @@ Three levels, each paid for only when it earns its place:
 
 | Level | What | Cost |
 |---|---|---|
-| 1 — always | Eight descriptions in the skill listing | ~1,100 tokens total |
+| 1 — always | Nine descriptions in the skill listing | ~1,300 tokens total |
 | 2 — on trigger | One `SKILL.md` core | ~900–1,500 tokens |
 | 3 — on demand | One reference, routed to by task | ~200–3,900 tokens |
 
 A session that orients, writes, and ships costs roughly 5–6k tokens of skill
-context. Carrying all eight skills in full would cost ~64k. Run
+context. Carrying all nine skills in full would cost ~76k. Run
 `python context_cost.py` for the current numbers; it fails if a core has grown
 past budget.
 
@@ -150,6 +158,8 @@ useful.
 - Performance is measured, never guessed, and every optimisation carries the
   number that justified it. The ceiling, though, is set at design time.
 - A test earns its place by failing when behaviour breaks, and only then.
+- A number that differs is a symptom; the finding is the mechanism that produced
+  it, sized so the explained causes sum exactly to the gap.
 - Documentation ships in the same commit as the code, or it rots.
 - "It runs" is not "it is done", and the report at the end says what was
   verified and what was skipped.
