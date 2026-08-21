@@ -7,227 +7,42 @@ silent join fan-out and float noise get mistaken for findings. This runs them
 in order, in exact decimal arithmetic, and decomposes the total gap into
 missing rows, extra rows and value differences so the parts sum to the whole.
 
+It then does what a human forgets to: attributes the gap across the descriptive
+columns, so a difference that lives entirely in one region, status or batch is
+named rather than hunted for, and checks whether those descriptive columns
+themselves agree on the rows whose numbers do.
+
     python reconcile.py --truth ledger.csv --candidate export.xlsx \
         --key order_id --value amount --abs-tol 0.005
 
     python reconcile.py --truth a.csv --candidate b.csv \
-        --key entity --key period --normalize-keys --json report.json
+        --key entity --key period --by region --by status --normalize-keys
 
-Stdlib only. Reads CSV/TSV and basic .xlsx. It answers "what differs", not
-"why" — take its output back to the hypothesis catalogue for the cause.
+Stdlib only, via tabular.py. It answers "what differs", not "why" — take its
+output back to the hypothesis catalogue for the cause.
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
 import json
-import re
 import sys
-import unicodedata
-import zipfile
 from collections import Counter, defaultdict
-from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
-Row = dict[str, str]
+from tabular import Row, close, key_of, load, money, normalise_key, numeric_columns, to_decimal
 
-# --------------------------------------------------------------------------- #
-# Loading
-# --------------------------------------------------------------------------- #
-
-EXCEL_EPOCH = date(1899, 12, 30)  # Excel's day 1 is 1900-01-01, with a leap bug
-DATE_FMT_IDS = set(range(14, 23)) | set(range(27, 37)) | set(range(45, 48)) | set(range(50, 59))
+MAX_CONTEXT_CARDINALITY = 50  # above this a column labels rows rather than grouping them
 
 
-def _local(tag: str) -> str:
-    return tag.rsplit("}", 1)[-1]
-
-
-def _col_index(ref: str) -> int:
-    """'BC12' -> 54 (zero-based column index)."""
-    n = 0
-    for ch in ref:
-        if not ch.isalpha():
-            break
-        n = n * 26 + (ord(ch.upper()) - 64)
-    return n - 1
-
-
-def load_xlsx(path: Path, sheet: str | None) -> list[list[str]]:
-    """Read a worksheet into rows of strings. Dates come back as ISO strings."""
-    import xml.etree.ElementTree as ET
-
-    with zipfile.ZipFile(path) as z:
-        names = z.namelist()
-
-        shared: list[str] = []
-        if "xl/sharedStrings.xml" in names:
-            for si in ET.fromstring(z.read("xl/sharedStrings.xml")):
-                shared.append("".join(t.text or "" for t in si.iter() if _local(t.tag) == "t"))
-
-        date_styles: set[int] = set()
-        if "xl/styles.xml" in names:
-            root = ET.fromstring(z.read("xl/styles.xml"))
-            custom = {
-                int(n.get("numFmtId", "0")): n.get("formatCode", "")
-                for n in root.iter()
-                if _local(n.tag) == "numFmt"
-            }
-            xfs = next((c for c in root if _local(c.tag) == "cellXfs"), [])
-            for i, xf in enumerate(xfs):
-                fmt_id = int(xf.get("numFmtId", "0"))
-                code = re.sub(r'"[^"]*"|\[[^\]]*\]', "", custom.get(fmt_id, ""))
-                if fmt_id in DATE_FMT_IDS or re.search(r"[ymdhs]", code):
-                    date_styles.add(i)
-
-        wb = ET.fromstring(z.read("xl/workbook.xml"))
-        sheets = [s for s in wb.iter() if _local(s.tag) == "sheet"]
-        rels = {}
-        if "xl/_rels/workbook.xml.rels" in names:
-            for rel in ET.fromstring(z.read("xl/_rels/workbook.xml.rels")):
-                rels[rel.get("Id")] = rel.get("Target", "").lstrip("/")
-        if not sheets:
-            raise SystemExit(f"{path}: no worksheets found")
-        chosen = sheets[0]
-        if sheet is not None:
-            match = [s for s in sheets if s.get("name") == sheet]
-            if not match:
-                have = ", ".join(s.get("name", "?") for s in sheets)
-                raise SystemExit(f"{path}: no sheet named {sheet!r}. Sheets: {have}")
-            chosen = match[0]
-        rid = next((v for k, v in chosen.attrib.items() if _local(k) == "id"), None)
-        target = rels.get(rid, "worksheets/sheet1.xml")
-        member = target if target.startswith("xl/") else f"xl/{target}"
-        if member not in names:
-            member = next(n for n in names if n.startswith("xl/worksheets/"))
-
-        rows: list[list[str]] = []
-        for r in ET.fromstring(z.read(member)).iter():
-            if _local(r.tag) != "row":
-                continue
-            cells: dict[int, str] = {}
-            for c in r:
-                if _local(c.tag) != "c":
-                    continue
-                idx = _col_index(c.get("r", "")) if c.get("r") else len(cells)
-                ctype = c.get("t", "n")
-                text = ""
-                for child in c:
-                    if _local(child.tag) == "v":
-                        text = child.text or ""
-                    elif _local(child.tag) == "is":
-                        text = "".join(t.text or "" for t in child.iter() if _local(t.tag) == "t")
-                if ctype == "s" and text:
-                    text = shared[int(text)]
-                elif ctype == "b" and text:
-                    text = "TRUE" if text == "1" else "FALSE"
-                elif ctype == "n" and text and int(c.get("s", "-1") or -1) in date_styles:
-                    try:
-                        serial = float(text)
-                        stamp = EXCEL_EPOCH + timedelta(days=serial)
-                        text = stamp.isoformat() if serial % 1 else stamp.isoformat()[:10]
-                    except (ValueError, OverflowError):
-                        pass
-                cells[idx] = text
-            width = max(cells) + 1 if cells else 0
-            rows.append([cells.get(i, "") for i in range(width)])
-        return rows
-
-
-def load(path: Path, sheet: str | None, delimiter: str | None) -> tuple[list[str], list[Row]]:
-    if path.suffix.lower() in {".xlsx", ".xlsm"}:
-        raw = load_xlsx(path, sheet)
-    else:
-        text = path.read_text(encoding="utf-8-sig", errors="replace")
-        if delimiter is None:
-            head = text.split("\n", 1)[0]
-            delimiter = "\t" if head.count("\t") > head.count(",") else ","
-        raw = [r for r in csv.reader(text.splitlines(), delimiter=delimiter)]
-    raw = [r for r in raw if any(str(c).strip() for c in r)]  # drop blank rows
-    if not raw:
-        raise SystemExit(f"{path}: no data rows")
-    header = [str(h).strip() for h in raw[0]]
-    rows = [dict(zip(header, [str(c) for c in r] + [""] * (len(header) - len(r)))) for r in raw[1:]]
-    return header, rows
-
-
-# --------------------------------------------------------------------------- #
-# Parsing and normalising
-# --------------------------------------------------------------------------- #
-
-CURRENCY = "$€£¥₹"
-
-
-def to_decimal(raw: str) -> Decimal | None:
-    """Parse a spreadsheet-shaped number. Returns None if it is not one."""
-    s = unicodedata.normalize("NFKC", str(raw)).strip().replace(" ", "")
-    if not s:
-        return None
-    s = s.replace("−", "-")
-    negative = s.startswith("(") and s.endswith(")")
-    if negative:
-        s = s[1:-1]
-    for ch in CURRENCY + " ":
-        s = s.replace(ch, "")
-    percent = s.endswith("%")
-    s = s.rstrip("%")
-    if s.count(",") and s.count("."):  # 1,234.56 vs 1.234,56
-        s = s.replace(",", "") if s.rfind(".") > s.rfind(",") else s.replace(".", "").replace(",", ".")
-    elif re.fullmatch(r"-?\d{1,3}(,\d{3})+", s):
-        s = s.replace(",", "")
-    elif s.count(",") == 1 and len(s.split(",")[1]) != 3:
-        s = s.replace(",", ".")
-    try:
-        value = Decimal(s)
-    except (InvalidOperation, ValueError):
-        return None
-    if percent:
-        value /= 100
-    return -value if negative else value
-
-
-def normalise_key(raw: str) -> str:
-    s = unicodedata.normalize("NFKC", str(raw)).strip().replace(" ", " ")
-    s = re.sub(r"\s+", " ", s).casefold()
-    if re.fullmatch(r"-?\d+\.0+", s):  # 1234.0 <- an ID read as a float
-        s = s.split(".")[0]
-    if re.fullmatch(r"0+\d+", s):  # 00742 <- a zero-padded code
-        s = s.lstrip("0")
-    return s
-
-
-def key_of(row: Row, keys: Sequence[str], normalise: bool) -> tuple[str, ...]:
-    return tuple(normalise_key(row.get(k, "")) if normalise else str(row.get(k, "")).strip() for k in keys)
-
-
-# --------------------------------------------------------------------------- #
-# Analysis
-# --------------------------------------------------------------------------- #
-
-
-def detect_value_columns(cols: Iterable[str], truth: list[Row], cand: list[Row], keys: set[str]) -> list[str]:
-    """Columns that parse as numbers in at least 90% of non-empty cells on both sides."""
-    found = []
-    for col in cols:
-        if col in keys:
-            continue
-        ok = True
-        for rows in (truth, cand):
-            filled = [r[col] for r in rows[:5000] if str(r.get(col, "")).strip()]
-            if not filled or sum(to_decimal(v) is not None for v in filled) < 0.9 * len(filled):
-                ok = False
-                break
-        if ok:
-            found.append(col)
-    return found
-
-
-def aggregate(rows: list[Row], keys: Sequence[str], values: Sequence[str], normalise: bool):
+def aggregate(rows: list[Row], keys: Sequence[str], values: Sequence[str],
+              context: Sequence[str], normalise: bool):
+    """Sum values by key, and remember each key's descriptive columns."""
     sums: dict[tuple[str, ...], dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
     counts: Counter[tuple[str, ...]] = Counter()
+    ctx: dict[tuple[str, ...], Row] = {}
     unparsed: Counter[str] = Counter()
     null_keys = 0
     for row in rows:
@@ -235,6 +50,7 @@ def aggregate(rows: list[Row], keys: Sequence[str], values: Sequence[str], norma
         if any(part == "" for part in k):
             null_keys += 1
         counts[k] += 1
+        ctx.setdefault(k, {c: str(row.get(c, "")).strip() for c in context})
         for col in values:
             parsed = to_decimal(row.get(col, ""))
             if parsed is None:
@@ -242,11 +58,7 @@ def aggregate(rows: list[Row], keys: Sequence[str], values: Sequence[str], norma
                     unparsed[col] += 1
             else:
                 sums[k][col] += parsed
-    return sums, counts, unparsed, null_keys
-
-
-def close(a: Decimal, b: Decimal, abs_tol: Decimal, rel_tol: Decimal) -> bool:
-    return abs(a - b) <= max(abs_tol, rel_tol * max(abs(a), abs(b)))
+    return sums, counts, ctx, unparsed, null_keys
 
 
 def pattern_scan(diffs: list[tuple[tuple[str, ...], Decimal, Decimal]], abs_tol: Decimal) -> list[str]:
@@ -281,8 +93,28 @@ def pattern_scan(diffs: list[tuple[tuple[str, ...], Decimal, Decimal]], abs_tol:
     return notes
 
 
-def money(x: Decimal) -> str:
-    return f"{x:,.4f}".rstrip("0").rstrip(".") if x % 1 else f"{x:,.0f}"
+def attribute(gap_by_key: dict[tuple[str, ...], Decimal], ctx: dict[tuple[str, ...], Row],
+              column: str) -> list[tuple[str, Decimal, int]]:
+    """Split the gap across the values of one descriptive column, largest first."""
+    by_value: dict[str, Decimal] = defaultdict(Decimal)
+    rows_by_value: Counter[str] = Counter()
+    for k, amount in gap_by_key.items():
+        value = ctx.get(k, {}).get(column, "") or "(blank)"
+        by_value[value] += amount
+        rows_by_value[value] += 1
+    return sorted(((v, a, rows_by_value[v]) for v, a in by_value.items()), key=lambda r: -abs(r[1]))
+
+
+def pick_context(common: Sequence[str], exclude: set[str], ctx: dict[tuple[str, ...], Row]) -> list[str]:
+    """Descriptive columns worth slicing by: more than one value, few enough to group."""
+    picked = []
+    for col in common:
+        if col in exclude:
+            continue
+        distinct = {row.get(col, "") for row in ctx.values()}
+        if 2 <= len(distinct) <= MAX_CONTEXT_CARDINALITY:
+            picked.append(col)
+    return picked
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -291,6 +123,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--candidate", required=True, type=Path, help="The file being checked")
     p.add_argument("--key", action="append", default=[], help="Key column (repeat for a composite key)")
     p.add_argument("--value", action="append", default=[], help="Numeric column to compare (default: auto-detect)")
+    p.add_argument("--by", action="append", default=[], help="Descriptive column to attribute the gap across "
+                                                             "(default: auto-detect low-cardinality columns)")
     p.add_argument("--map", action="append", default=[], metavar="CAND=TRUTH", help="Rename a candidate column")
     p.add_argument("--abs-tol", default="0.005", help="Absolute tolerance (default 0.005)")
     p.add_argument("--rel-tol", default="1e-9", help="Relative tolerance (default 1e-9)")
@@ -332,19 +166,25 @@ def main(argv: list[str] | None = None) -> int:
     missing_key = [k for k in keys if k not in t_cols or k not in c_cols]
     if missing_key:
         raise SystemExit(f"key column(s) not present on both sides: {', '.join(missing_key)}")
-    values = args.value or detect_value_columns(common, t_rows, c_rows, set(keys))
+    values = args.value or numeric_columns(common, t_rows, c_rows, exclude=set(keys))
     if not values:
         raise SystemExit("no numeric columns found on both sides; pass --value explicitly")
     absent = [v for v in values if v not in t_cols or v not in c_cols]
     if absent:
         raise SystemExit(f"value column(s) not present on both sides: {', '.join(absent)} "
                          f"(use --map CAND=TRUTH if they are named differently)")
+    described = [c for c in common if c not in set(keys) | set(values)]
+    context = args.by or described
+    absent_by = [c for c in args.by if c not in common]
+    if absent_by:
+        raise SystemExit(f"--by column(s) not present on both sides: {', '.join(absent_by)}")
     out(f"key: {' + '.join(keys)}    comparing: {', '.join(values)}")
+    out(f"describing columns carried for attribution: {', '.join(context) if context else '(none)'}")
     if args.normalize_keys:
         out("keys normalised (case, whitespace, leading zeros, trailing .0)")
 
-    t_sums, t_counts, t_unparsed, t_nullkeys = aggregate(t_rows, keys, values, args.normalize_keys)
-    c_sums, c_counts, c_unparsed, c_nullkeys = aggregate(c_rows, keys, values, args.normalize_keys)
+    t_sums, t_counts, t_ctx, t_unparsed, t_nullkeys = aggregate(t_rows, keys, values, context, args.normalize_keys)
+    c_sums, c_counts, c_ctx, c_unparsed, c_nullkeys = aggregate(c_rows, keys, values, context, args.normalize_keys)
     for side, unparsed in (("truth", t_unparsed), ("candidate", c_unparsed)):
         for col, n in unparsed.items():
             out(f"!  {side}: {n:,} non-empty values in {col!r} did not parse as numbers "
@@ -352,7 +192,8 @@ def main(argv: list[str] | None = None) -> int:
 
     out("\n=== L2  keys and grain " + "=" * 48)
     findings: list[str] = []
-    for side, counts, nulls, rows in (("truth", t_counts, t_nullkeys, t_rows), ("candidate", c_counts, c_nullkeys, c_rows)):
+    for side, counts, nulls, rows in (("truth", t_counts, t_nullkeys, t_rows),
+                                      ("candidate", c_counts, c_nullkeys, c_rows)):
         dups = {k: n for k, n in counts.items() if n > 1}
         out(f"{side:<10} {len(counts):,} distinct keys, {len(rows):,} rows, "
             f"{len(dups):,} duplicated keys" + (f", max multiplicity {max(dups.values())}" if dups else ""))
@@ -388,7 +229,10 @@ def main(argv: list[str] | None = None) -> int:
         findings.append(f"{len(c_only):,} keys in the candidate are not in the truth")
     report["coverage"] = {"matched": len(matched), "truth_only": len(t_only), "candidate_only": len(c_only)}
 
+    all_ctx = {**c_ctx, **t_ctx}  # truth wins where a key exists on both sides
+    slice_by = pick_context(context, set(), all_ctx) if not args.by else list(args.by)
     report["columns"] = {}
+
     for col in values:
         t_total = sum((s[col] for s in t_sums.values()), Decimal(0))
         c_total = sum((s[col] for s in c_sums.values()), Decimal(0))
@@ -417,6 +261,40 @@ def main(argv: list[str] | None = None) -> int:
         if residual:
             out("  ^ the residual must be zero — if it is not, the comparison itself is wrong")
 
+        # Where the gap lives, across each descriptive column.
+        gap_by_key: dict[tuple[str, ...], Decimal] = {}
+        for k in t_only:
+            gap_by_key[k] = -t_sums[k][col]
+        for k in c_only:
+            gap_by_key[k] = c_sums[k][col]
+        for k in matched:
+            delta = c_sums[k][col] - t_sums[k][col]
+            if delta:
+                gap_by_key[k] = delta
+        movement = sum((abs(v) for v in gap_by_key.values()), Decimal(0))
+        attribution: dict[str, list[dict[str, str]]] = {}
+        if len(gap_by_key) >= 3 and slice_by and movement:  # attribution over 1-2 keys is noise
+            out(f"\n--- where the {col} gap lives " + "-" * max(4, 41 - len(col)))
+            for column in slice_by:
+                groups = attribute(gap_by_key, all_ctx, column)
+                top_value, top_amount, top_rows = groups[0]
+                share = abs(top_amount) / movement * 100
+                population = {row.get(column, "") for row in all_ctx.values()}
+                out(f"  by {column}:")
+                for value, amount, n in groups[: args.sample]:
+                    out(f"    {value[:28]:<30} {money(amount):>16}   {abs(amount) / movement * 100:5.1f}% of movement"
+                        f"   {n:,} keys")
+                if len(groups) > args.sample:
+                    out(f"    ... and {len(groups) - args.sample:,} more values")
+                if share >= 80 and len(population) > 1:
+                    note = (f"{share:.0f}% of the {col} movement is in {column}={top_value!r} "
+                            f"({top_rows:,} keys, 1 of {len(population):,} values of {column}) — start there")
+                    out(f"    ^ {note}")
+                    findings.append(note)
+                attribution[column] = [
+                    {"value": v, "amount": str(a), "keys": n} for v, a, n in groups[: args.sample]
+                ]
+
         diffs = [(k, t_sums[k][col], c_sums[k][col]) for k in matched
                  if not close(t_sums[k][col], c_sums[k][col], abs_tol, rel_tol)]
         within = len(matched) - len(diffs)
@@ -438,19 +316,38 @@ def main(argv: list[str] | None = None) -> int:
             for note in pattern_scan(diffs, abs_tol):
                 out(f"  pattern: {note}")
                 findings.append(f"{col}: {note}")
-            findings.append(f"{col}: {len(diffs):,} matched keys differ, net {money(sum((c - t for _, t, c in diffs), Decimal(0)))}")
+            findings.append(f"{col}: {len(diffs):,} matched keys differ, net "
+                            f"{money(sum((c - t for _, t, c in diffs), Decimal(0)))}")
 
         report["columns"][col] = {
             "truth_total": str(t_total), "candidate_total": str(c_total), "difference": str(gap),
             "bridge": {"missing_rows": str(-missing), "extra_rows": str(extra),
                        "matched_value_differences": str(matched_diff), "residual": str(residual)},
             "matched_within_tolerance": within, "matched_differing": len(diffs),
-            "patterns": pattern_scan(diffs, abs_tol),
+            "patterns": pattern_scan(diffs, abs_tol), "attribution": attribution,
         }
+
+    # A row can carry the right number attached to the wrong thing.
+    if context and matched:
+        out("\n=== L5  descriptive columns on matched keys " + "=" * 27)
+        drift: dict[str, int] = {}
+        for column in context:
+            changed = [k for k in matched
+                       if normalise_key(t_ctx[k].get(column, "")) != normalise_key(c_ctx[k].get(column, ""))]
+            drift[column] = len(changed)
+            flag = "  <- the numbers may be right and attached to the wrong thing" if changed else ""
+            out(f"  {column:<28} {len(changed):,} of {len(matched):,} matched keys differ{flag}")
+            for k in sorted(changed)[: args.sample]:
+                out(f"    {'|'.join(k):<28} truth {t_ctx[k].get(column, '')!r:<20} "
+                    f"cand {c_ctx[k].get(column, '')!r}")
+            if changed:
+                findings.append(f"{column}: differs on {len(changed):,} matched keys "
+                                f"— a descriptive column, so totals can still tie while rows are misfiled")
+        report["descriptive_drift"] = drift
 
     out("\n=== verdict " + "=" * 59)
     if not findings:
-        out("no structural or value differences found at this tolerance.")
+        out("no structural, value, or descriptive differences found at this tolerance.")
         out("before believing it: confirm the two inputs are different files, that the")
         out("tolerance is not masking (re-run with --abs-tol 0), and perturb one row to")
         out("prove this check can fail.")

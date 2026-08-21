@@ -29,8 +29,13 @@ noise. Pull out only these, quoting the run for evidence but keeping the *rule*:
 3. **The causes seen, with their signatures and tests** — a local version of
    `references/hypotheses.md` ranked by what actually happens in *this* feed.
    Include the false leads that were ruled out, and how, so nobody re-runs them.
-4. **The mechanics** — file locations and naming, the query or script, the
-   thresholds and where they came from, the report format, who receives it.
+4. **The column dictionary** — what each column is for, which ones are
+   additive, which located the cause, which are derived and can be recomputed as
+   an internal check. Nobody rediscovers this cheaply.
+5. **The file and period rules** — how files are named and where they land, what
+   one file covers, whether rows restate after export and which vintage wins.
+6. **The mechanics** — the query or script, the thresholds and where they came
+   from, the report format, who receives it.
 
 Leave out: the specific numbers from one run (they date the skill instantly),
 the narrative of how the investigation went, and anything already covered by

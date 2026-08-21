@@ -28,7 +28,7 @@ repeating them, so only what is relevant loads.
 | **code-craft** | Any other language: naming, function shape, control flow, errors, state, when to rewrite | Writing or refactoring TS/JS, Go, Rust, Java, C#, Ruby, shell, SQL |
 | **testing-craft** | What to test, AAA structure, determinism, mocking discipline, edge cases, coverage as diagnostic | Writing, fixing, or reviewing tests |
 | **perf-engineering** | Measure-first method, design-time performance, complexity, N+1 and I/O, caching, memory, cost | Something is slow, expensive, or memory-hungry; designing something whose speed matters |
-| **ground-truth-analysis** | Comparing numbers against a reference: the comparison contract, layered checks, hypotheses and their tests, adversarial review, the closing bridge | "do these match", reconciling a sheet or export against a source of truth, explaining why totals disagree |
+| **ground-truth-analysis** | Comparing numbers against a reference: the comparison contract, layered checks, what every column is for, periods and vintages, hypotheses and their tests, adversarial review, the closing bridge | "do these match", reconciling a sheet or export against a source of truth, explaining why totals disagree, checking a series of monthly files |
 | **docs-craft** | README, CONTRIBUTING, CHANGELOG, docstrings, ADRs, `docs/` by Diátaxis mode | Writing documentation, or finishing something someone else will use |
 | **ship-quality** | Self-review, running the repo's gates, security sweep, Conventional Commits, PR description, honest reporting | Before committing, before a PR, "is this ready" |
 
@@ -38,7 +38,7 @@ alongside, `ship-quality` to finish.
 
 ## Bundled scripts
 
-Five things that are reconstructed from memory badly, made deterministic:
+Seven things that are reconstructed from memory badly, made deterministic:
 
 ```bash
 # Generate a complete, correct starting tree (python | node | go | rust)
@@ -48,18 +48,29 @@ python repo-architect/scripts/scaffold.py --name my-project --lang python --kind
 ./ship-quality/scripts/run_repo_checks.sh --list    # show what it would run
 ./ship-quality/scripts/run_repo_checks.sh           # run them, report each
 
-# Reconcile two tables and print a bridge that closes to zero
+# Reconcile two tables: bridge, attribution, worst offenders
 python ground-truth-analysis/scripts/reconcile.py --truth ledger.csv \
-    --candidate export.xlsx --key order_id --value amount
+    --candidate export.xlsx --key order_id --value amount --by region
+
+# Say what every column in a file is for, and which ones explain a difference
+python ground-truth-analysis/scripts/profile_columns.py --file export.csv --key order_id
+
+# Track keys and values across many files — periods, vintages, restatements
+python ground-truth-analysis/scripts/track_across_files.py --files "exports/*.csv" \
+    --key order_id --lookup ORD-00417
 
 # Keep the suite itself honest
 python context_cost.py --detail      # what each level costs, per file
 python validate.py                   # routing, budgets, frontmatter, fences
 ```
 
-`reconcile.py` is stdlib-only and uses exact decimal arithmetic, so a float
-artefact never gets reported as a finding; it decomposes the total gap into
-missing rows, extra rows, and value differences that sum back to it exactly.
+The three reconciliation scripts are stdlib-only and use exact decimal
+arithmetic, so a float artefact never gets reported as a finding. `reconcile.py`
+decomposes the total gap into missing rows, extra rows, and value differences
+that sum back to it exactly, then says which region, status or batch the gap
+sits in. `profile_columns.py` infers each column's role and finds the keys,
+dependencies and derived columns. `track_across_files.py` turns a folder of
+exports into a timeline, with its gaps, restatements and per-key history.
 `run_repo_checks.sh` never invents commands — it reads the Makefile,
 `package.json` scripts, `pyproject.toml`, `go.mod`, and `Cargo.toml`, so what
 passes locally is what CI runs. `validate.py` exits non-zero on a broken route,
@@ -124,7 +135,7 @@ Three levels, each paid for only when it earns its place:
 | 3 — on demand | One reference, routed to by task | ~200–3,900 tokens |
 
 A session that orients, writes, and ships costs roughly 5–6k tokens of skill
-context. Carrying all nine skills in full would cost ~76k. Run
+context. Carrying all nine skills in full would cost ~79k. Run
 `python context_cost.py` for the current numbers; it fails if a core has grown
 past budget.
 

@@ -24,12 +24,30 @@ description: <What is compared to what, and why it exists — then the words a
 | Scope | <filters, statuses, entities, date range> | <filters> |
 | As-of | <timezone, cut time, settling behaviour> | <timezone, cut> |
 | Units / sign | <currency, scale, sign convention> | <> |
+| Files / period | <one file per what? naming convention, where they land> | <> |
+| Vintage | <does a row change after export? which vintage is the truth?> | <> |
 
 - **Authority**: <why the truth side wins, and what would make it the wrong
   reference for this question>
 - **Tolerance**: <value + where the number came from>
 - **Materiality**: <value + who set it>
 - **Known-good baseline**: <last period verified by hand, and by whom>
+
+## Column dictionary
+
+<!-- Every column that matters, and what it is FOR — the section that stops the
+     next person comparing three numeric columns and ignoring the one that
+     explains the gap. Roles: identity / temporal / dimension / measure /
+     derived / metadata. See `ground-truth-analysis` → `references/column-semantics.md`. -->
+
+| Column | Role | Means | Additivity / units | Watch out for |
+|---|---|---|---|---|
+| <name> | <role> | <in business terms> | <additive? currency? scale?> | <trap> |
+
+- **Slice every difference by**: <the dimension and lineage columns that have
+  historically located the cause here>
+- **Derived columns to recompute on each side**: <e.g. gross = qty x unit_price>
+- **Dependencies that must hold**: <e.g. sku -> category, region -> currency>
 
 ## Assumptions that had to be resolved
 
