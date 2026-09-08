@@ -33,14 +33,26 @@ class _FakeAnthropic(BaseHTTPRequestHandler):
             self.send_header("content-type", "text/event-stream")
             self.send_header("transfer-encoding", "chunked")
             self.end_headers()
-            for i in range(4):
-                event = f"event: delta\ndata: {json.dumps({'i': i, 'model': payload['model']})}\n\n".encode()
+            events = [
+                ("message_start", {"type": "message_start", "message": {
+                    "id": "msg_1", "model": payload["model"], "usage": {
+                        "input_tokens": 120, "cache_read_input_tokens": 48_000,
+                        "cache_creation_input_tokens": 2_400, "output_tokens": 1}}}),
+                *[("delta", {"i": i, "model": payload["model"]}) for i in range(4)],
+                ("message_delta", {"type": "message_delta",
+                                   "usage": {"output_tokens": 777}}),
+            ]
+            for name, data in events:
+                event = f"event: {name}\ndata: {json.dumps(data)}\n\n".encode()
                 self.wfile.write(b"%X\r\n%s\r\n" % (len(event), event))
                 self.wfile.flush()
             self.wfile.write(b"0\r\n\r\n")
             return
 
-        out = json.dumps({"id": "msg_1", "model": payload.get("model")}).encode()
+        out = json.dumps({"id": "msg_1", "model": payload.get("model"), "usage": {
+            "input_tokens": 95, "output_tokens": 310,
+            "cache_read_input_tokens": 30_000,
+            "cache_creation_input_tokens": 1_100}}).encode()
         self.send_response(200)
         self.send_header("content-type", "application/json")
         self.send_header("content-length", str(len(out)))
@@ -136,6 +148,31 @@ class ProxyTest(unittest.TestCase):
         self.post("/v1/messages", {"not": "a message request"})
         self.assertEqual(_FakeAnthropic.received[0]["body"], {"not": "a message request"})
 
+    def test_usage_is_captured_from_a_non_streaming_response(self):
+        self.proxy.router.measured.clear()
+        self.post("/v1/messages", self.message("rename parse in src/app.py"))
+        measured = self.proxy.router.measured["haiku"]
+        self.assertEqual(measured["cache_read"], 30_000)
+        self.assertEqual(measured["cache_write"], 1_100)
+        self.assertEqual(measured["output_tokens"], 310)
+
+    def test_usage_is_captured_from_a_streamed_response(self):
+        self.proxy.router.measured.clear()
+        response = self.post("/v1/messages", self.message("read src/app.py", stream=True))
+        payload = response.read().decode()
+        self.assertEqual(payload.count("event: delta"), 4)      # body still intact
+        measured = self.proxy.router.measured["haiku"]
+        self.assertEqual(measured["cache_read"], 48_000)
+        self.assertEqual(measured["cache_write"], 2_400)
+        self.assertEqual(measured["output_tokens"], 777)        # from message_delta
+
+    def test_the_savings_report_switches_to_measured_numbers(self):
+        self.proxy.router.measured.clear()
+        self.post("/v1/messages", self.message("rename parse in src/app.py"))
+        report = self.proxy.router.savings()
+        self.assertIn("measured", report["basis"])
+        self.assertGreater(report["net_saving_usd"], 0)
+
     def test_health_and_stats_are_served_locally(self):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         health = json.loads(opener.open(self.base + "/__router/healthz", timeout=5).read())
@@ -143,6 +180,7 @@ class ProxyTest(unittest.TestCase):
         self.post("/v1/messages", self.message("read src/app.py"))
         stats = json.loads(opener.open(self.base + "/__router/stats", timeout=5).read())
         self.assertIn("haiku", stats["by_tier"])
+        self.assertIn("cache_rewarm_usd", stats)
 
     def test_an_upstream_failure_surfaces_as_an_api_shaped_error(self):
         cfg = config.replace(self.proxy.cfg, upstream="http://127.0.0.1:1")

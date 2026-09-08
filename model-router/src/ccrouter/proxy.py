@@ -27,6 +27,59 @@ _HOP_BY_HOP = frozenset({
 })
 
 _ROUTED_PATHS = ("/v1/messages",)
+
+# Usage keys worth keeping. cache_read/cache_creation are what make the cache
+# economics real rather than modelled.
+_USAGE_KEYS = ("input_tokens", "output_tokens",
+               "cache_read_input_tokens", "cache_creation_input_tokens")
+
+
+class UsageSniffer:
+    """Pull `usage` out of a response without buffering the whole body.
+
+    Non-streaming responses carry it once at the top level. Streaming responses
+    split it: `message_start` has the input and cache counts, `message_delta`
+    the final output count. Both are small JSON objects, so a bounded rolling
+    window is enough to catch them even when a chunk boundary lands mid-event.
+    """
+
+    WINDOW = 16384
+
+    def __init__(self) -> None:
+        self.usage: dict[str, int] = {}
+        self._buffer = b""
+
+    def feed(self, chunk: bytes) -> None:
+        if not chunk:
+            return
+        self._buffer = (self._buffer + chunk)[-self.WINDOW:]
+        if b"usage" not in self._buffer:
+            return
+        for line in self._buffer.split(b"\n"):
+            if not line.startswith(b"data: "):
+                continue
+            try:
+                event = json.loads(line[6:])
+            except ValueError:
+                continue
+            for holder in (event, event.get("message") or {}):
+                if isinstance(holder, dict):
+                    self._absorb(holder.get("usage"))
+
+    def finish(self, body: bytes) -> None:
+        """For a non-streaming response, whose whole body is one JSON object."""
+        try:
+            self._absorb(json.loads(body).get("usage"))
+        except (ValueError, AttributeError):
+            pass
+
+    def _absorb(self, usage: Any) -> None:
+        if not isinstance(usage, dict):
+            return
+        for key in _USAGE_KEYS:
+            value = usage.get(key)
+            if isinstance(value, int) and value >= self.usage.get(key, 0):
+                self.usage[key] = value
 _NEVER_ROUTED = ("/v1/messages/count_tokens", "/v1/messages/batches")
 
 
@@ -76,31 +129,31 @@ class _Handler(BaseHTTPRequestHandler):
     do_PUT = do_DELETE = do_PATCH = do_POST
 
     # -- the interesting part ---------------------------------------------
-    def _route(self, body: bytes) -> tuple[bytes, dict[str, str]]:
+    def _route(self, body: bytes) -> tuple[bytes, dict[str, str], Any]:
         path = urllib.parse.urlparse(self.path).path
         if self.command != "POST" or not body:
-            return body, {}
+            return body, {}, None
         if path in _NEVER_ROUTED or not any(path.startswith(p) for p in _ROUTED_PATHS):
-            return body, {}
+            return body, {}, None
         try:
             payload = json.loads(body)
             if not isinstance(payload, dict) or "model" not in payload:
-                return body, {}
+                return body, {}, None
             decision = self.router.decide(payload)
         except Exception as exc:                       # fail open, always
             self.log_message("routing skipped: %r", exc)
-            return body, {"x-ccrouter-error": type(exc).__name__}
+            return body, {"x-ccrouter-error": type(exc).__name__}, None
 
         self.log_message("%s", decision.summary())
+        headers = {"x-ccrouter-tier": tier_name(decision.tier),
+                   "x-ccrouter-source": decision.source}
+        if decision.rewarm_usd:
+            headers["x-ccrouter-rewarm-usd"] = f"{decision.rewarm_usd:.4f}"
         if not decision.rewrote:
-            return body, {"x-ccrouter-tier": tier_name(decision.tier),
-                          "x-ccrouter-source": decision.source}
+            return body, headers, decision
         payload["model"] = decision.model
-        return json.dumps(payload).encode(), {
-            "x-ccrouter-tier": tier_name(decision.tier),
-            "x-ccrouter-source": decision.source,
-            "x-ccrouter-from": decision.original_model,
-        }
+        headers["x-ccrouter-from"] = decision.original_model
+        return json.dumps(payload).encode(), headers, decision
 
     def _connect(self) -> http.client.HTTPConnection:
         url = urllib.parse.urlparse(self.cfg.upstream)
@@ -111,7 +164,7 @@ class _Handler(BaseHTTPRequestHandler):
         return conn
 
     def _relay(self, body: bytes) -> None:
-        body, extra = self._route(body)
+        body, extra, decision = self._route(body)
         headers = {k: v for k, v in self.headers.items() if k.lower() not in _HOP_BY_HOP}
         if body:
             headers["content-length"] = str(len(body))
@@ -128,13 +181,14 @@ class _Handler(BaseHTTPRequestHandler):
                 "type": "ccrouter_upstream_error", "message": f"{type(exc).__name__}: {exc}"}})
 
         try:
-            self._send_response(upstream, extra)
+            self._send_response(upstream, extra, decision)
         except (BrokenPipeError, ConnectionResetError):
             pass
         finally:
             conn.close()
 
-    def _send_response(self, upstream: http.client.HTTPResponse, extra: dict[str, str]) -> None:
+    def _send_response(self, upstream: http.client.HTTPResponse, extra: dict[str, str],
+                       decision: Any = None) -> None:
         declared_length = upstream.getheader("content-length")
         self.send_response(upstream.status, upstream.reason)
         for name, value in upstream.getheaders():
@@ -143,11 +197,14 @@ class _Handler(BaseHTTPRequestHandler):
         for name, value in extra.items():
             self.send_header(name, value)
 
+        sniffer = UsageSniffer()
         if declared_length is not None:
             payload = upstream.read()
             self.send_header("content-length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+            sniffer.finish(payload)
+            self.router.observe_usage(decision, sniffer.usage)
             return
 
         # Streaming (SSE). http.client already de-chunks, so re-chunk on the way out.
@@ -157,10 +214,12 @@ class _Handler(BaseHTTPRequestHandler):
             chunk = upstream.read(8192)
             if not chunk:
                 break
+            sniffer.feed(chunk)
             self.wfile.write(b"%X\r\n%s\r\n" % (len(chunk), chunk))
             self.wfile.flush()
         self.wfile.write(b"0\r\n\r\n")
         self.wfile.flush()
+        self.router.observe_usage(decision, sniffer.usage)
 
 
 class ProxyServer(ThreadingHTTPServer):

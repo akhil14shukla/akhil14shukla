@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import classifier, rules, semantic, signals
+from . import classifier, economics, rules, semantic, signals
 from .config import HAIKU, Config, tier_index, tier_name
 from .rules import Contribution, Verdict
 
@@ -32,6 +32,9 @@ class _TurnState:
     tier: int
     escalated: bool
     updated: float
+    steps: int = 1
+    warm_tier: int = -1        # the tier whose prompt cache is currently warm
+    context_tokens: int = 0
 
 
 @dataclass
@@ -48,6 +51,8 @@ class Decision:
     context_tokens: int
     rewrote: bool
     signals: dict[str, Any] = field(default_factory=dict)
+    rewarm_usd: float = 0.0        # cache rebuild this decision paid for
+    step: int = 1
 
     def summary(self) -> str:
         arrow = f"{self.original_model} -> {self.model}" if self.rewrote else f"{self.model} (unchanged)"
@@ -61,6 +66,10 @@ class Router:
         self._turns: OrderedDict[str, _TurnState] = OrderedDict()
         self._log_path = Path(os.path.expanduser(cfg.log_file))
         self._rng = random.Random()
+        self._turn_length = economics.TurnLength(cfg.policy.expected_turn_length)
+        self.rewarm_usd = 0.0                 # modelled, before responses arrive
+        self.measured_rewarm_usd = 0.0        # billed, from cache_creation tokens
+        self.measured: dict[str, dict[str, int]] = {}
         self.stats: dict[str, dict[str, float]] = {}
 
     # -- stickiness ------------------------------------------------------
@@ -72,8 +81,12 @@ class Router:
             new_turn = state is None or s.turn_index > state.turn_index
 
             if new_turn or s.phase == "user_turn":
+                if state is not None:
+                    self._turn_length.observe(state.steps)
                 self._turns[s.session_key] = _TurnState(
-                    s.turn_index, verdict.tier, escalated=False, updated=time.time()
+                    s.turn_index, verdict.tier, escalated=False, updated=time.time(),
+                    warm_tier=state.warm_tier if state else -1,
+                    context_tokens=s.context_tokens,
                 )
                 while len(self._turns) > 512:
                     self._turns.popitem(last=False)
@@ -129,6 +142,63 @@ class Router:
         verdict.source = "explore"
         return verdict
 
+    def _cache_gate(
+        self, s: signals.Signals, verdict: Verdict, state: _TurnState | None
+    ) -> tuple[Verdict, float]:
+        """Refuse a *downgrade* that costs more to re-warm than it will save.
+
+        Prompt caches are model-scoped, so changing models throws away the warm
+        prefix and pays to rebuild it elsewhere. At a large context most
+        downgrades never earn that back: sonnet -> haiku at 50k tokens saves
+        under a cent per request and costs ten to re-warm, so it only pays if
+        thirteen more requests follow. Typical turns are shorter than that.
+
+        The gate deliberately only looks at downgrades. An upgrade is a quality
+        decision -- the loop is failing, or the work turned out to be harder
+        than it looked -- and no cache saving justifies staying on a model that
+        cannot do the job. Upgrades pass through with their cost recorded, so
+        `ccrouter stats` can show what escalation actually cost.
+
+        User overrides and exploration are exempt in both directions: one is an
+        instruction, and the other exists precisely to sample tiers the policy
+        would not otherwise pick.
+        """
+        cfg = self.cfg
+        warm = state.warm_tier if state and state.warm_tier >= 0 else -1
+        if warm < 0 or warm == verdict.tier:
+            return verdict, 0.0
+
+        horizon = self._turn_length.expected_remaining(state.steps if state else 0)
+        analysis = economics.analyse_switch(
+            cfg, warm, verdict.tier, s.context_tokens, horizon)
+        move = f"{tier_name(warm)}->{tier_name(verdict.tier)}"
+
+        exempt = (
+            verdict.tier > warm                              # upgrades are quality
+            or verdict.source in ("override", "explore")
+            or not cfg.policy.switch_must_pay_for_itself
+        )
+        if exempt:
+            verdict.contributions.append(Contribution(
+                "cache_rewarm", "score", 0.0,
+                f"{move} re-warms the prompt cache for ${analysis.rewarm_cost:.4f}"))
+            return verdict, analysis.rewarm_cost
+
+        if analysis.net_saving > cfg.policy.min_switch_saving_usd:
+            verdict.contributions.append(Contribution(
+                "cache_rewarm", "score", 0.0,
+                f"{move} pays: {analysis.detail}, net ${analysis.net_saving:+.4f}"))
+            return verdict, analysis.rewarm_cost
+
+        verdict.contributions.append(Contribution(
+            "cache_hold", "pin", warm,
+            f"held on {tier_name(warm)}: {move} saves "
+            f"${analysis.saving_per_request:.4f}/req but costs "
+            f"${analysis.rewarm_cost:.4f} to re-warm ({analysis.detail})"))
+        verdict.tier = warm
+        verdict.source = "cache_hold"
+        return verdict, 0.0
+
     # -- main entry point -------------------------------------------------
     def decide(self, body: dict[str, Any]) -> Decision:
         cfg = self.cfg
@@ -151,13 +221,33 @@ class Router:
         verdict = self._explore(s, verdict)
         verdict = self._sticky(s, verdict)
 
+        with self._lock:
+            state = self._turns.get(s.session_key)
+        verdict, rewarm = self._cache_gate(s, verdict, state)
+        step = self._advance(s, verdict.tier, rewarm)
+
         model = cfg.model_for(verdict.tier)
         return self._record(
             Decision(verdict.tier, model, original, verdict.source, verdict.score,
                      verdict.reasons, s.session_key, s.turn_index, s.phase,
-                     s.context_tokens, model != original, semantic.signals_dict(s)),
+                     s.context_tokens, model != original, semantic.signals_dict(s),
+                     rewarm, step),
             s,
         )
+
+    def _advance(self, s: signals.Signals, tier: int, rewarm: float) -> int:
+        """Record which tier is now warm, and how long turns are running."""
+        with self._lock:
+            state = self._turns.get(s.session_key)
+            if state is None:
+                return 1
+            if state.warm_tier >= 0 and state.warm_tier != tier:
+                self.rewarm_usd += rewarm
+            state.warm_tier = tier
+            state.context_tokens = s.context_tokens
+            if s.phase == "tool_loop":
+                state.steps += 1
+            return state.steps
 
     # -- observability ----------------------------------------------------
     def _record(self, decision: Decision, s: signals.Signals) -> Decision:
@@ -174,20 +264,84 @@ class Router:
             pass  # Logging must never take the proxy down.
         return decision
 
+    def observe_usage(self, decision: "Decision | None", usage: dict[str, int]) -> None:
+        """Record what the API actually billed, replacing the 4-chars/token guess.
+
+        `cache_creation_input_tokens` on a request that changed models *is* the
+        re-warm, measured rather than modelled -- so the cost of switching stops
+        being an estimate as soon as real traffic flows through.
+        """
+        if decision is None or not usage:
+            return
+        name = tier_name(decision.tier)
+        with self._lock:
+            bucket = self.measured.setdefault(name, {
+                "calls": 0, "input_tokens": 0, "output_tokens": 0,
+                "cache_read": 0, "cache_write": 0,
+            })
+            bucket["calls"] += 1
+            bucket["input_tokens"] += usage.get("input_tokens", 0)
+            bucket["output_tokens"] += usage.get("output_tokens", 0)
+            bucket["cache_read"] += usage.get("cache_read_input_tokens", 0)
+            written = usage.get("cache_creation_input_tokens", 0)
+            bucket["cache_write"] += written
+            if decision.rewarm_usd and written:
+                cache = economics.CacheModel.for_ttl(self.cfg.cache_ttl)
+                price = self.cfg.pricing_per_mtok_in.get(name, 0.0) / 1e6
+                self.measured_rewarm_usd += written * cache.write_multiplier * price
+
+    def _measured_cost(self, tier_for_pricing: str | None = None) -> float:
+        cache = economics.CacheModel.for_ttl(self.cfg.cache_ttl)
+        total = 0.0
+        for name, bucket in self.measured.items():
+            priced = tier_for_pricing or name
+            price_in = self.cfg.pricing_per_mtok_in.get(priced, 0.0) / 1e6
+            price_out = self.cfg.pricing_per_mtok_out.get(priced, 0.0) / 1e6
+            total += (
+                bucket["input_tokens"] * price_in
+                + bucket["cache_read"] * cache.read_multiplier * price_in
+                + bucket["cache_write"] * cache.write_multiplier * price_in
+                + bucket["output_tokens"] * price_out
+            )
+        return total
+
     def savings(self) -> dict[str, Any]:
-        """What the routed traffic cost, against everything-on-the-ceiling."""
-        price = self.cfg.pricing_per_mtok_in
+        """What the routed traffic cost, against everything on the ceiling tier.
+
+        Reports measured numbers once responses have flowed through the proxy,
+        and falls back to a token estimate before that. Both are net of what
+        re-warming the prompt cache cost, which an earlier version of this
+        report ignored and therefore overstated.
+        """
         ceiling = self.cfg.policy.max_tier
-        routed = sum(
-            b["input_tokens"] / 1e6 * price.get(tier, 0.0) for tier, b in self.stats.items()
-        )
-        baseline = sum(
-            b["input_tokens"] / 1e6 * price.get(ceiling, 0.0) for b in self.stats.values()
-        )
-        return {
-            "by_tier": self.stats,
-            "estimated_input_cost_usd": round(routed, 4),
-            "baseline_all_%s_usd" % ceiling: round(baseline, 4),
-            "estimated_saving_usd": round(baseline - routed, 4),
-            "note": "input tokens only, estimated at 4 chars/token from request bodies",
-        }
+        report: dict[str, Any] = {"by_tier": self.stats}
+
+        if self.measured:
+            routed = self._measured_cost()
+            baseline = self._measured_cost(ceiling)
+            report.update({
+                "basis": "measured from response usage",
+                "measured_by_tier": self.measured,
+                "cost_usd": round(routed, 4),
+                f"baseline_all_{ceiling}_usd": round(baseline, 4),
+                "cache_rewarm_usd": round(self.measured_rewarm_usd, 4),
+                "net_saving_usd": round(baseline - routed, 4),
+            })
+            return report
+
+        price = self.cfg.pricing_per_mtok_in
+        routed = sum(b["input_tokens"] / 1e6 * price.get(tier, 0.0)
+                     for tier, b in self.stats.items())
+        baseline = sum(b["input_tokens"] / 1e6 * price.get(ceiling, 0.0)
+                       for b in self.stats.values())
+        report.update({
+            "basis": "estimated at 4 chars/token; no responses observed yet",
+            "cost_usd": round(routed, 4),
+            f"baseline_all_{ceiling}_usd": round(baseline, 4),
+            "cache_rewarm_usd": round(self.rewarm_usd, 4),
+            "net_saving_usd": round(baseline - routed - self.rewarm_usd, 4),
+            "expected_turn_length": round(
+                self._turn_length.expected_remaining(0), 1),
+            "turn_samples": self._turn_length.samples,
+        })
+        return report

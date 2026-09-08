@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from . import __version__, classifier, config, proxy, rules, signals
+from . import __version__, classifier, config, economics, proxy, rules, signals
 from .config import Config, tier_name
 
 
@@ -83,6 +83,8 @@ def cmd_stats(cfg: Config, args: argparse.Namespace) -> int:
     tokens: defaultdict[str, int] = defaultdict(int)
     sources: Counter[str] = Counter()
     rewrites = 0
+    switches = 0
+    rewarm = 0.0
     total = 0
     for line in path.read_text(encoding="utf-8").splitlines()[-args.limit:]:
         try:
@@ -95,6 +97,10 @@ def cmd_stats(cfg: Config, args: argparse.Namespace) -> int:
         tokens[name] += int(entry.get("context_tokens", 0))
         sources[entry.get("source", "?")] += 1
         rewrites += bool(entry.get("rewrote"))
+        cost = float(entry.get("rewarm_usd", 0.0) or 0.0)
+        if cost:
+            switches += 1
+            rewarm += cost
 
     if not total:
         print("decision log is empty")
@@ -115,8 +121,52 @@ def cmd_stats(cfg: Config, args: argparse.Namespace) -> int:
     print("\n  by source: " + ", ".join(f"{k}={v}" for k, v in sources.most_common()))
     print(f"\n  estimated input cost   ${routed:.3f}")
     print(f"  all-{ceiling} baseline    ${baseline:.3f}")
-    print(f"  estimated saving       ${baseline - routed:.3f}  "
-          f"({0 if not baseline else (baseline - routed) / baseline:.0%})")
+    if rewarm:
+        print(f"  prompt-cache re-warms  ${rewarm:.3f}  "
+              f"({switches} switch(es) paid to rebuild the cache)")
+    net = baseline - routed - rewarm
+    print(f"  net saving             ${net:.3f}  "
+          f"({0 if not baseline else net / baseline:.0%})")
+    if rewarm > (baseline - routed) * 0.25:
+        print("\n  !! Re-warms are eating a quarter of the saving. Raise\n"
+              "     policy.min_switch_saving_usd, or check for churn between tiers.")
+    return 0
+
+
+def cmd_economics(cfg: Config, args: argparse.Namespace) -> int:
+    """Show when a model switch pays for the prompt cache it throws away."""
+    cache = economics.CacheModel.for_ttl(cfg.cache_ttl)
+    horizon = args.horizon
+    print(f"cache TTL {cfg.cache_ttl}: reads cost {cache.read_multiplier:g}x base input, "
+          f"writes {cache.write_multiplier:g}x")
+    print(f"assuming {horizon:g} more requests in the turn and "
+          f"{args.output_tokens} output tokens each\n")
+
+    contexts = args.contexts or [10_000, 50_000, 150_000, 400_000]
+    print(f"{'downgrade':<18}{'context':>10}{'re-warm':>10}{'saved/req':>11}"
+          f"{'break-even':>12}{'net':>10}   verdict")
+    for context in contexts:
+        for high, low in ((2, 1), (2, 0), (1, 0)):
+            analysis = economics.analyse_switch(
+                cfg, high, low, context, horizon, output_tokens=args.output_tokens)
+            breakeven = ("never" if analysis.breakeven_requests == float("inf")
+                         else f"{analysis.breakeven_requests:.1f} req")
+            verdict = "worth it" if analysis.worth_it else "stay put"
+            print(f"{tier_name(high) + ' -> ' + tier_name(low):<18}{context:>10,}"
+                  f"{analysis.rewarm_cost:>10.4f}{analysis.saving_per_request:>11.4f}"
+                  f"{breakeven:>12}{analysis.net_saving:>+10.4f}   {verdict}")
+
+    print(f"\n{'upgrade':<18}{'context':>10}{'re-warm':>10}   (a quality decision; "
+          "the re-warm is what it costs)")
+    for context in contexts:
+        for low, high in ((0, 2), (1, 2)):
+            analysis = economics.analyse_switch(
+                cfg, low, high, context, horizon, output_tokens=args.output_tokens)
+            print(f"{tier_name(low) + ' -> ' + tier_name(high):<18}{context:>10,}"
+                  f"{analysis.rewarm_cost:>10.4f}")
+
+    print("\nA cheap sub-task is usually better served by a subagent than a switch:")
+    print("  a subagent has its own conversation, so it never disturbs this cache.")
     return 0
 
 
@@ -179,6 +229,13 @@ def build_parser() -> argparse.ArgumentParser:
     stats.add_argument("--log")
     stats.add_argument("--limit", type=int, default=100_000)
     stats.set_defaults(func=cmd_stats)
+
+    econ = sub.add_parser("economics", help="when a switch pays for the cache it discards")
+    econ.add_argument("--horizon", type=float, default=6.0,
+                      help="expected remaining requests in the turn")
+    econ.add_argument("--output-tokens", type=int, default=500)
+    econ.add_argument("--contexts", type=int, nargs="*")
+    econ.set_defaults(func=cmd_economics)
 
     doctor = sub.add_parser("doctor", help="check config, endpoints and environment")
     doctor.set_defaults(func=cmd_doctor)

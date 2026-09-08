@@ -95,8 +95,124 @@ class StickinessTest(unittest.TestCase):
     def test_savings_are_reported_against_the_ceiling_tier(self):
         self.decide([{"role": "user", "content": CHEAP}])
         report = self.router.savings()
-        self.assertGreater(report["estimated_saving_usd"], 0)
+        self.assertGreater(report["net_saving_usd"], 0)
         self.assertIn("haiku", report["by_tier"])
+        self.assertIn("estimated", report["basis"])
+
+    def test_savings_switch_to_measured_numbers_once_responses_arrive(self):
+        decision = self.decide([{"role": "user", "content": CHEAP}])
+        self.router.observe_usage(decision, {
+            "input_tokens": 300, "output_tokens": 900,
+            "cache_read_input_tokens": 40_000, "cache_creation_input_tokens": 1_200,
+        })
+        report = self.router.savings()
+        self.assertIn("measured", report["basis"])
+        self.assertEqual(report["measured_by_tier"]["haiku"]["cache_read"], 40_000)
+        # Same tokens priced on haiku must beat the same tokens priced on opus.
+        self.assertGreater(report["net_saving_usd"], 0)
+
+    def test_the_savings_report_subtracts_what_re_warming_cost(self):
+        self.decide([{"role": "user", "content": CHEAP}])
+        naive = self.router.savings()["net_saving_usd"]
+        self.router.rewarm_usd = 999.0
+        self.assertLess(self.router.savings()["net_saving_usd"], naive)
+
+
+class CacheGateTest(unittest.TestCase):
+    """A switch throws away the warm prefix. It has to earn that back."""
+
+    PAD = "x " * 100_000          # ~50k tokens of already-cached conversation
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = config.replace(
+            config.load(), log_file=str(Path(self.tmp.name) / "log.jsonl"))
+
+    def run_pair(self, first, second, cfg=None, pad=True):
+        router_ = router.Router(cfg or self.base)
+        head = [{"role": "user", "content": first}]
+        a = router_.decide({"model": "claude-sonnet-5", "system": SYSTEM,
+                            "tools": TOOLS, "messages": head})
+        tail = head + ([{"role": "assistant", "content": [
+            {"type": "text", "text": self.PAD}]}] if pad else [])
+        tail = tail + [{"role": "user", "content": second}]
+        b = router_.decide({"model": "claude-sonnet-5", "system": SYSTEM,
+                            "tools": TOOLS, "messages": tail})
+        return a, b, router_
+
+    def test_an_unprofitable_downgrade_is_refused(self):
+        first, second, _ = self.run_pair(
+            "add a --json flag to the export command", "now show me src/export.py")
+        self.assertEqual(first.tier, SONNET)
+        self.assertEqual(second.tier, SONNET)          # would be haiku without the gate
+        self.assertEqual(second.source, "cache_hold")
+        self.assertIn("re-warm", " ".join(second.reasons))
+
+    def test_a_downgrade_that_pays_is_allowed(self):
+        # opus -> haiku saves far more per request, so it clears the re-warm.
+        first, second, _ = self.run_pair(
+            "design the sharding scheme for orders", "now show me src/export.py")
+        self.assertEqual(first.tier, OPUS)
+        self.assertEqual(second.tier, HAIKU)
+        self.assertNotEqual(second.source, "cache_hold")
+
+    def test_the_gate_can_be_turned_off(self):
+        cfg = config.replace(self.base, policy=config.replace(
+            self.base.policy, switch_must_pay_for_itself=False))
+        _, second, _ = self.run_pair(
+            "add a --json flag to the export command", "now show me src/export.py", cfg)
+        self.assertEqual(second.tier, HAIKU)
+
+    def test_a_small_context_lets_the_downgrade_through(self):
+        _, second, _ = self.run_pair(
+            "add a --json flag to the export command", "now show me src/export.py",
+            pad=False)
+        self.assertEqual(second.tier, HAIKU)
+
+    def test_the_gate_never_blocks_an_upgrade(self):
+        """Escalation is a quality decision; no cache saving outranks it."""
+        cfg = self.base
+        router_ = router.Router(cfg)
+        head = [{"role": "user", "content": CHEAP}]
+        router_.decide({"model": "claude-opus-5", "system": SYSTEM,
+                        "tools": TOOLS, "messages": head})
+        failing = head + [
+            {"role": "assistant", "content": [
+                {"type": "text", "text": self.PAD}]},
+            {"role": "assistant", "content": RAN},
+            {"role": "user", "content": FAILED},
+            {"role": "assistant", "content": RAN},
+            {"role": "user", "content": FAILED}]
+        decision = router_.decide({"model": "claude-opus-5", "system": SYSTEM,
+                                   "tools": TOOLS, "messages": failing})
+        self.assertGreaterEqual(decision.tier, SONNET)
+        self.assertNotEqual(decision.source, "cache_hold")
+
+    def test_exploration_is_exempt_so_the_training_data_stays_unbiased(self):
+        cfg = config.replace(self.base, policy=config.replace(
+            self.base.policy, explore_rate=1.0))
+        router_ = router.Router(cfg)
+        router_._rng.seed(3)
+        head = [{"role": "user", "content": "add a --json flag to the export command"}]
+        router_.decide({"model": "claude-sonnet-5", "system": SYSTEM,
+                        "tools": TOOLS, "messages": head})
+        tail = head + [{"role": "assistant", "content": [
+            {"type": "text", "text": self.PAD}]},
+            {"role": "user", "content": "now show me src/export.py"}]
+        decision = router_.decide({"model": "claude-sonnet-5", "system": SYSTEM,
+                                   "tools": TOOLS, "messages": tail})
+        self.assertEqual(decision.source, "explore")
+
+    def test_re_warm_spend_is_accumulated(self):
+        _, _, router_ = self.run_pair(
+            "design the sharding scheme for orders", "now show me src/export.py")
+        self.assertGreater(router_.rewarm_usd, 0)
+
+    def test_turn_lengths_are_learned_from_traffic(self):
+        _, _, router_ = self.run_pair(
+            "design the sharding scheme for orders", "now show me src/export.py")
+        self.assertGreaterEqual(router_._turn_length.samples, 1)
 
 
 if __name__ == "__main__":

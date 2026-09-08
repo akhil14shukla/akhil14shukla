@@ -4,6 +4,9 @@
 # what changed.
 
 listen   = "127.0.0.1:4000"
+# Claude Code's prompt-cache TTL: "1h" (writes cost 2x base input) or "5m"
+# (1.25x). Reads cost 0.1x either way. This drives every switch decision below.
+cache_ttl = "1h"
 upstream = "https://api.anthropic.com"
 log_file = "~/.claude/model-router/decisions.jsonl"
 
@@ -45,6 +48,25 @@ cheap_agents = ["explore", "search", "statusline-setup"]
 # inside the floors, so exploration cannot override a safety rule.
 # Set this to 0.05 while you are collecting data for ml/train.py.
 explore_rate = 0.0
+
+# Prompt caches are model-scoped: switching models discards the warm prefix and
+# pays to rebuild it on the new one. At 50k tokens a sonnet -> haiku downgrade
+# saves under a cent per request and costs ten to re-warm, so it only pays if
+# 13 more requests follow -- longer than most turns. With this on, a downgrade
+# must clear its own re-warm cost over the expected remaining requests.
+#
+# Upgrades are never gated: escalation is a quality decision, and no cache
+# saving justifies staying on a model that cannot do the job. Run
+# `ccrouter economics` to see the break-even table for your own prices.
+switch_must_pay_for_itself = true
+min_switch_saving_usd      = 0.0
+expected_turn_length       = 6.0   # prior, until the log has 30+ finished turns
+
+# A bounded hop to a cheaper model and back. Modelled by `ccrouter economics`
+# but off by default: a subagent does the same job better, because it has its
+# own conversation and never touches the main loop's cache.
+allow_excursions   = false
+max_excursion_steps = 3
 
 # Weights are additive; the sum is clamped to [-1.5, 1.5] and compared against
 # the thresholds above. Set one to 0.0 to switch a rule off.
@@ -99,9 +121,14 @@ encoder        = ""       # empty: whatever the model was trained with
 weight         = 0.6      # raise toward 1.0 once you trust it on your traffic
 min_confidence = 0.45     # below this the model abstains
 
-# Used only for the savings estimate in `ccrouter stats`. USD per million
-# input tokens.
+# USD per million tokens, used for the switch economics and the savings report.
+# Update these when prices change -- every break-even above depends on them.
 [pricing_per_mtok_in]
 haiku  = 1.0
-sonnet = 3.0
-opus   = 15.0
+sonnet = 2.0
+opus   = 5.0
+
+[pricing_per_mtok_out]
+haiku  = 5.0
+sonnet = 10.0
+opus   = 25.0

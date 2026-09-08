@@ -200,6 +200,55 @@ failure — timeout, connection refused, a chatty answer it can't parse — leav
 the rule verdict standing and says so in the log. `ccrouter doctor` tells you
 whether it is actually reachable.
 
+## Switching models is not free
+
+Prompt caches are **model-scoped**. Changing models mid-conversation discards
+the warm prefix and pays to rebuild it on the new model — a cache read costs
+~0.1× base input, a write costs 2× on the 1-hour TTL (1.25× on the 5-minute
+one). Anthropic's guidance is blunt: *"model switch has no escape hatch."*
+
+A router that ignores that is billing you for re-warms it never counted. Run
+`ccrouter economics` for the break-even table on your own prices:
+
+```
+downgrade            context   re-warm  saved/req  break-even       net   verdict
+opus -> haiku         50,000    0.1000     0.0300     3.3 req   +0.0800   worth it
+opus -> sonnet        50,000    0.2000     0.0225     8.9 req   -0.0650   stay put
+sonnet -> haiku       50,000    0.1000     0.0075    13.3 req   -0.0550   stay put
+sonnet -> haiku      150,000    0.3000     0.0175    17.1 req   -0.1950   stay put
+```
+
+Three things fall out of that, and the router now implements them:
+
+- **Sonnet → Haiku is usually a loss.** The per-request saving is small against
+  the same re-warm, so it needs 13–17 more requests to break even. Turns are
+  shorter than that.
+- **Opus → Haiku is the downgrade that reliably pays** — break-even under five
+  requests even at 150k tokens.
+- **Upgrades never pay for themselves on cost**, and are never gated. Escalating
+  to Opus at 150k context costs $1.50 to re-warm; when the loop is failing, you
+  pay it. The number is logged, not used to talk you out of it.
+
+`policy.switch_must_pay_for_itself` (on by default) refuses a downgrade that
+cannot earn back its re-warm over the expected remaining requests, and says so:
+
+```
+cache_hold  pin=sonnet  held on sonnet: sonnet->haiku saves $0.0075/req but costs
+                        $0.1002 to re-warm (pays for itself after 13.3 requests;
+                        6.0 expected)
+```
+
+The horizon starts from a prior and switches to the observed distribution of
+turn lengths once the log has enough of them.
+
+**The better tool for cheap sub-tasks is a subagent.** It has its own
+conversation and its own cache, so it never disturbs the main loop — which is
+why this plugin ships `model-router:quick`. Leaving a model for a few steps and
+returning is also cheaper than it looks (the old prefix is still cached, so you
+only rewrite what was appended while away) — but only inside the TTL and the
+server's ~20-position lookback. `ccrouter economics` models that too;
+`allow_excursions` is off by default because subagents dominate it.
+
 ## Seeing what it did
 
 ```bash
@@ -212,13 +261,20 @@ ccrouter stats
 #     estimated saving  $54.312  (68%)
 ```
 
+Costs come from the `usage` on real responses — the proxy reads
+`cache_read_input_tokens` and `cache_creation_input_tokens` off both streaming
+and non-streaming replies, so re-warm spend is measured, not modelled. Before
+any response has flowed through it falls back to a 4-chars/token estimate and
+labels itself as such.
+
 Every decision is appended to `~/.claude/model-router/decisions.jsonl` with its
 score and reasons. Responses carry `x-ccrouter-tier`, `x-ccrouter-source` and
 `x-ccrouter-from` headers, and the proxy serves `/__router/stats` and
 `/__router/healthz`.
 
-Cost figures are estimates from request bodies at 4 chars/token, input tokens
-only — good enough to compare configurations, not an invoice.
+An earlier version of this report ignored cache re-warms entirely and therefore
+overstated the saving; it now subtracts them and warns when they eat more than a
+quarter of the win.
 
 ## Tuning it
 
@@ -269,10 +325,11 @@ model-router/
 │   ├── signals.py      request body -> features (the conversation's shape)
 │   ├── rules.py        features -> scored, floored, explained verdict
 │   ├── semantic.py     optional learned scorer (numpy, ~0.1 ms/prompt)
+│   ├── economics.py    prompt-cache cost model: when a switch pays for itself
 │   ├── classifier.py   optional local-LLM tiebreaker, fail-open
 │   ├── router.py       turn stickiness, escalation ratchet, exploration, log
 │   ├── proxy.py        the ANTHROPIC_BASE_URL reverse proxy
-│   └── cli.py          serve / explain / stats / doctor
+│   └── cli.py          serve / explain / economics / stats / doctor
 ├── hooks/advise.py     UserPromptSubmit advisory mode (no proxy needed)
 ├── agents/quick.md     Haiku subagent the advisory hook delegates to
 ├── prompts/classify.md the editable local-LLM prompt
@@ -283,5 +340,5 @@ model-router/
 │   ├── label.py        Claude Opus 5 distillation via the Batch API
 │   ├── golden.py       hand-labelled test set, the only honest number
 │   └── train.py        ablation, asymmetric cost metric, numpy export
-└── tests/              77 tests, stdlib unittest, real sockets
+└── tests/              109 tests, stdlib unittest, real sockets
 ```

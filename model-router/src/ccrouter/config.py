@@ -126,6 +126,15 @@ class Policy:
     # get: outcomes for tiers the policy would not otherwise have chosen.
     explore_rate: float = 0.0
 
+    # Cache economics. A model switch throws away the warm prefix and pays to
+    # rebuild it on the new model, so a downgrade saving less than the re-warm
+    # costs is a loss. Quality escalations (a floor firing) ignore this.
+    switch_must_pay_for_itself: bool = True
+    min_switch_saving_usd: float = 0.0
+    allow_excursions: bool = False      # bounded hop to a cheaper model, then back
+    max_excursion_steps: int = 3
+    expected_turn_length: float = 6.0   # prior until the log has enough turns
+
 
 @dataclass(frozen=True)
 class Config:
@@ -148,8 +157,12 @@ class Config:
     subagent_markers: tuple[str, ...] = (r"You are an agent for Claude Code",)
     llm: LLMConfig = field(default_factory=LLMConfig)
     semantic: SemanticConfig = field(default_factory=SemanticConfig)
+    cache_ttl: str = "1h"          # Claude Code's prompt-cache TTL: "5m" or "1h"
     pricing_per_mtok_in: dict[str, float] = field(
-        default_factory=lambda: {"haiku": 1.0, "sonnet": 3.0, "opus": 15.0}
+        default_factory=lambda: {"haiku": 1.0, "sonnet": 2.0, "opus": 5.0}
+    )
+    pricing_per_mtok_out: dict[str, float] = field(
+        default_factory=lambda: {"haiku": 5.0, "sonnet": 10.0, "opus": 25.0}
     )
 
     def model_for(self, tier: int) -> str:
@@ -222,5 +235,7 @@ def load(path: str | os.PathLike[str] | None = None) -> Config:
         subagent_markers=tuple(raw.get("subagent_markers", cfg.subagent_markers)),
         llm=llm,
         semantic=semantic,
+        cache_ttl=str(raw.get("cache_ttl", cfg.cache_ttl)),
         pricing_per_mtok_in={**cfg.pricing_per_mtok_in, **raw.get("pricing_per_mtok_in", {})},
+        pricing_per_mtok_out={**cfg.pricing_per_mtok_out, **raw.get("pricing_per_mtok_out", {})},
     )
