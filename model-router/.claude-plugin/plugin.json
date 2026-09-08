@@ -1,0 +1,13 @@
+{
+  "name": "model-router",
+  "displayName": "Model Router",
+  "version": "0.1.0",
+  "description": "Routes each Claude Code request to the cheapest model that can do it correctly, using conversation-shape rules and an optional local LLM tiebreaker.",
+  "author": { "name": "Akhil Shukla", "url": "https://github.com/akhil14shukla" },
+  "repository": "https://github.com/akhil14shukla/akhil14shukla",
+  "license": "MIT",
+  "keywords": ["routing", "cost", "haiku", "proxy", "hooks"],
+  "hooks": "./hooks/hooks.json",
+  "agents": ["./agents/quick.md"],
+  "commands": ["./commands/route.md"]
+}

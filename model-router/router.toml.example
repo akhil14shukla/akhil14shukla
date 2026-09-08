@@ -1,0 +1,88 @@
+# ccrouter configuration. Copy to ~/.claude/model-router/router.toml
+# (or set CCROUTER_CONFIG). Every key is optional; anything you leave out keeps
+# its built-in default. Run `ccrouter explain "<prompt>"` after editing to see
+# what changed.
+
+listen   = "127.0.0.1:4000"
+upstream = "https://api.anthropic.com"
+log_file = "~/.claude/model-router/decisions.jsonl"
+
+# The three tiers the rules speak in, mapped to concrete model ids. Point these
+# at whatever your account can reach -- Bedrock ARNs and Vertex ids work too.
+[tiers]
+haiku  = "claude-haiku-4-5-20251001"
+sonnet = "claude-sonnet-5"
+opus   = "claude-opus-5"
+
+[policy]
+default_tier = "sonnet"          # where a request lands with no strong signal
+min_tier     = "haiku"           # never route below this
+max_tier     = "opus"            # never route above this (set "sonnet" to cap spend)
+
+cheap_threshold     = -0.25      # score at or below this -> haiku
+expensive_threshold = 0.35       # score at or above this -> opus
+
+# Small models lose the thread on very long contexts even for easy asks.
+haiku_context_ceiling_tokens = 80000
+
+# Extended thinking is an explicit request for deliberation; don't undercut it.
+thinking_floor_sonnet_tokens = 4000
+thinking_floor_opus_tokens   = 24000
+
+# When the agentic loop starts failing, stop being clever about cost.
+failures_floor_sonnet = 2
+failures_floor_opus   = 4
+
+sticky_turns             = true   # decide once per human turn, not per API call
+allow_mid_turn_downgrade = false  # escalation is a ratchet
+passthrough_background   = true   # leave Claude Code's own haiku calls alone
+
+cheap_agents = ["explore", "search", "statusline-setup"]
+
+# Weights are additive; the sum is clamped to [-1.5, 1.5] and compared against
+# the thresholds above. Set one to 0.0 to switch a rule off.
+[weights]
+cheap_intent      = -0.35   # "read", "show me", "rename", "run the tests"
+expensive_intent  =  0.35   # "design", "race condition", "why does", "migrate"
+short_question    = -0.20   # a short question about code already in context
+single_file_edit  = -0.25   # exactly one path named, no fan-out
+broad_scope       =  0.30   # a glob, or "across the codebase"
+multi_file        =  0.25   # three or more paths named
+multi_step        =  0.20   # an enumerated list of steps
+pasted_stacktrace =  0.30   # a stack trace or compiler error in the prompt
+underspecified    =  0.15   # "fix it" -- needs judgement, not just speed
+long_instruction  =  0.20   # over 1200 characters of instruction
+thinking_enabled  =  0.40   # extended thinking was requested
+readonly_followup = -0.50   # last step only read files; this step summarises
+mutating_followup =  0.10   # mid-edit
+recent_failures   =  0.25   # per failing tool result, capped at three
+tool_thrash       =  0.30   # the same tool call repeated -- the loop is stuck
+large_context     =  0.15   # context past the haiku ceiling
+cheap_subagent    = -0.60   # a search/explore subagent
+
+# Phrases are regexes, matched case-insensitively against the prompt with code
+# fences stripped. Replacing a list replaces it wholesale, so start from the
+# defaults in src/ccrouter/config.py if you only want to add to it.
+# [lexicon]
+# cheap     = ["\\bread (the |this )?file\\b", "\\bshow me\\b"]
+# expensive = ["\\bdesign\\b", "\\brace condition\\b"]
+
+# Optional local-LLM tiebreaker. Only consulted when the rule score lands
+# within `dead_band` of a threshold, on a fresh human turn, with a short
+# timeout and an LRU cache. Any failure keeps the rule verdict.
+[llm]
+enabled     = false
+endpoint    = "http://localhost:11434/v1/chat/completions"   # Ollama, llama.cpp, LM Studio, vLLM
+model       = "qwen2.5:3b"
+timeout_s   = 2.5
+dead_band   = 0.18
+cache_size  = 512
+# api_key_env = "LOCAL_LLM_KEY"
+# prompt_file = "~/.claude/model-router/classify.md"          # your own prompt
+
+# Used only for the savings estimate in `ccrouter stats`. USD per million
+# input tokens.
+[pricing_per_mtok_in]
+haiku  = 1.0
+sonnet = 3.0
+opus   = 15.0
