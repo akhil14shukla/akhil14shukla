@@ -1,2 +1,10 @@
 __pycache__/
 *.py[cod]
+.cache/
+
+# Regenerable, deterministically, from taxonomy.py / golden.py:
+ml/dataset/*.jsonl
+
+# The trained model is committed (9 KB) so the semantic scorer works
+# without a training run. Regenerate with ml/train.py.
+!ml/dataset/model.npz

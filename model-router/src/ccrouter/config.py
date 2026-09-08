@@ -94,6 +94,17 @@ class LLMConfig:
 
 
 @dataclass(frozen=True)
+class SemanticConfig:
+    """The learned scorer. Trained by ml/train.py; optional at runtime."""
+
+    enabled: bool = False
+    model_path: str = "~/.claude/model-router/model.npz"
+    encoder: str = ""              # empty: use whatever the model was trained with
+    weight: float = 0.6            # how much the margin can move the score
+    min_confidence: float = 0.45   # below this the model abstains
+
+
+@dataclass(frozen=True)
 class Policy:
     default_tier: str = "sonnet"
     min_tier: str = "haiku"
@@ -109,6 +120,11 @@ class Policy:
     allow_mid_turn_downgrade: bool = False
     passthrough_background: bool = True
     cheap_agents: tuple[str, ...] = ("explore", "search", "statusline-setup")
+
+    # Fraction of fresh human turns routed to a neighbouring tier at random.
+    # Costs a little accuracy and buys the only unbiased training data you can
+    # get: outcomes for tiers the policy would not otherwise have chosen.
+    explore_rate: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -131,6 +147,7 @@ class Config:
     failure_patterns: tuple[str, ...] = tuple(DEFAULT_FAILURE_PATTERNS)
     subagent_markers: tuple[str, ...] = (r"You are an agent for Claude Code",)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    semantic: SemanticConfig = field(default_factory=SemanticConfig)
     pricing_per_mtok_in: dict[str, float] = field(
         default_factory=lambda: {"haiku": 1.0, "sonnet": 3.0, "opus": 15.0}
     )
@@ -184,6 +201,10 @@ def load(path: str | os.PathLike[str] | None = None) -> Config:
     llm = replace(cfg.llm, **{
         k: v for k, v in raw.get("llm", {}).items() if k in LLMConfig.__dataclass_fields__
     })
+    semantic = replace(cfg.semantic, **{
+        k: v for k, v in raw.get("semantic", {}).items()
+        if k in SemanticConfig.__dataclass_fields__
+    })
     lex = raw.get("lexicon", {})
 
     return replace(
@@ -200,5 +221,6 @@ def load(path: str | os.PathLike[str] | None = None) -> Config:
         failure_patterns=tuple(raw.get("failure_patterns", cfg.failure_patterns)),
         subagent_markers=tuple(raw.get("subagent_markers", cfg.subagent_markers)),
         llm=llm,
+        semantic=semantic,
         pricing_per_mtok_in={**cfg.pricing_per_mtok_in, **raw.get("pricing_per_mtok_in", {})},
     )

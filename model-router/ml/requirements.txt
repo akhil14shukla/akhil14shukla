@@ -1,0 +1,7 @@
+# Training only. The router itself runs on the standard library; the runtime
+# scorer needs just numpy + model2vec, and even those are optional.
+numpy>=1.26
+scikit-learn>=1.4
+model2vec>=0.3          # static embeddings: lookup + mean, no torch at runtime
+anthropic>=0.40         # only for ml/label.py (Opus 5 distillation)
+xgboost>=2.0 ; python_version >= "3.9"   # optional: train.py falls back to sklearn

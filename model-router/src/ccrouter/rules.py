@@ -130,8 +130,15 @@ def _floor_rules(s: Signals, cfg: Config) -> list[Contribution]:
     return out
 
 
-def evaluate(s: Signals, cfg: Config) -> Verdict:
-    """Score the request, apply floors and ceilings, and explain every step."""
+def evaluate(
+    s: Signals, cfg: Config, semantic: tuple[float, str] | None = None
+) -> Verdict:
+    """Score the request, apply floors and ceilings, and explain every step.
+
+    `semantic` is an optional (delta, detail) pair from the learned scorer. It
+    enters as one more score, deliberately: a model that has never seen this
+    repository does not get to override a floor.
+    """
     p = cfg.policy
 
     if s.override_tier:
@@ -142,6 +149,9 @@ def evaluate(s: Signals, cfg: Config) -> Verdict:
         )
 
     contributions = _score_rules(s, cfg)
+    if semantic is not None:
+        delta, detail = semantic
+        contributions.append(Contribution("semantic_model", "score", delta, detail))
     score = sum(float(c.value) for c in contributions if c.kind == "score")
     score = max(-1.5, min(1.5, score))
 

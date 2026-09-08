@@ -13,15 +13,16 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import threading
 import time
 from collections import OrderedDict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import classifier, rules, signals
-from .config import HAIKU, Config, tier_name
+from . import classifier, rules, semantic, signals
+from .config import HAIKU, Config, tier_index, tier_name
 from .rules import Contribution, Verdict
 
 
@@ -46,6 +47,7 @@ class Decision:
     phase: str
     context_tokens: int
     rewrote: bool
+    signals: dict[str, Any] = field(default_factory=dict)
 
     def summary(self) -> str:
         arrow = f"{self.original_model} -> {self.model}" if self.rewrote else f"{self.model} (unchanged)"
@@ -58,6 +60,7 @@ class Router:
         self._lock = threading.Lock()
         self._turns: OrderedDict[str, _TurnState] = OrderedDict()
         self._log_path = Path(os.path.expanduser(cfg.log_file))
+        self._rng = random.Random()
         self.stats: dict[str, dict[str, float]] = {}
 
     # -- stickiness ------------------------------------------------------
@@ -97,6 +100,35 @@ class Router:
                 verdict.source = "sticky"
             return verdict
 
+    def _explore(self, s: signals.Signals, verdict: Verdict) -> Verdict:
+        """Occasionally route a fresh turn to a neighbouring tier, on purpose.
+
+        Mined outcomes are otherwise only ever observed for the tier the policy
+        already chose, so they confirm the policy rather than test it. A small
+        randomised slice is what makes the training data unbiased -- and it is
+        clamped inside the floors, so exploration never overrides a safety rule.
+        """
+        rate = self.cfg.policy.explore_rate
+        if rate <= 0 or s.phase != "user_turn" or verdict.source not in ("rules", "llm"):
+            return verdict
+        if self._rng.random() >= rate:
+            return verdict
+
+        floor = max((int(c.value) for c in verdict.contributions if c.kind == "floor"), default=0)
+        ceiling = min((int(c.value) for c in verdict.contributions if c.kind == "ceiling"),
+                      default=tier_index(self.cfg.policy.max_tier))
+        options = [t for t in (verdict.tier - 1, verdict.tier + 1) if floor <= t <= ceiling]
+        if not options:
+            return verdict
+
+        chosen = self._rng.choice(options)
+        verdict.contributions.append(Contribution(
+            "exploration", "pin", chosen,
+            f"randomised from {tier_name(verdict.tier)} for unbiased training data"))
+        verdict.tier = chosen
+        verdict.source = "explore"
+        return verdict
+
     # -- main entry point -------------------------------------------------
     def decide(self, body: dict[str, Any]) -> Decision:
         cfg = self.cfg
@@ -114,15 +146,16 @@ class Router:
                 s,
             )
 
-        verdict = rules.evaluate(s, cfg)
+        verdict = rules.evaluate(s, cfg, semantic=semantic.score_for(s.prompt, s, cfg))
         verdict = classifier.refine(verdict, s, cfg)
+        verdict = self._explore(s, verdict)
         verdict = self._sticky(s, verdict)
 
         model = cfg.model_for(verdict.tier)
         return self._record(
             Decision(verdict.tier, model, original, verdict.source, verdict.score,
                      verdict.reasons, s.session_key, s.turn_index, s.phase,
-                     s.context_tokens, model != original),
+                     s.context_tokens, model != original, semantic.signals_dict(s)),
             s,
         )
 

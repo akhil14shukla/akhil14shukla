@@ -39,6 +39,13 @@ passthrough_background   = true   # leave Claude Code's own haiku calls alone
 
 cheap_agents = ["explore", "search", "statusline-setup"]
 
+# Fraction of fresh human turns deliberately routed to a neighbouring tier.
+# Costs a little accuracy and buys the only unbiased training data available:
+# outcomes for tiers the policy would never have picked on its own. Clamped
+# inside the floors, so exploration cannot override a safety rule.
+# Set this to 0.05 while you are collecting data for ml/train.py.
+explore_rate = 0.0
+
 # Weights are additive; the sum is clamped to [-1.5, 1.5] and compared against
 # the thresholds above. Set one to 0.0 to switch a rule off.
 [weights]
@@ -79,6 +86,18 @@ dead_band   = 0.18
 cache_size  = 512
 # api_key_env = "LOCAL_LLM_KEY"
 # prompt_file = "~/.claude/model-router/classify.md"          # your own prompt
+
+# The learned semantic scorer -- what the prompt *means*, rather than which
+# words it contains. Train it with ml/train.py; see ml/README.md. The model
+# enters as one more score (delta = weight * (P(opus) - P(haiku))), so it can
+# never undercut a floor or beat an explicit !opus / !haiku override.
+# Needs numpy + model2vec; without them the router falls back to rules silently.
+[semantic]
+enabled        = false
+model_path     = "~/.claude/model-router/model.npz"
+encoder        = ""       # empty: whatever the model was trained with
+weight         = 0.6      # raise toward 1.0 once you trust it on your traffic
+min_confidence = 0.45     # below this the model abstains
 
 # Used only for the savings estimate in `ccrouter stats`. USD per million
 # input tokens.

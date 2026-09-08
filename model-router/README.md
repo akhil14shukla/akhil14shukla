@@ -114,6 +114,13 @@ is three words long.
 background Haiku calls (chat titles, summaries) are passed through untouched
 rather than upgraded.
 
+**What the prompt means** (optional). A lexicon cannot tell `read src/queue.go
+and summarise it` from `read src/queue.go and work out why prod diverges from
+staging` -- both match `read`, and the rules under-route the second one. A small
+learned model over sentence embeddings can, in ~0.1 ms. See
+[`ml/README.md`](ml/README.md); it is off by default and the router runs without
+numpy installed.
+
 ### Scores, floors and pins
 
 Rules contribute one of three things, and keeping them separate is the point:
@@ -137,6 +144,33 @@ that turn. Escalation is the one thing allowed to break the pin: if tool calls
 start failing, the router upgrades immediately and **never falls back down**
 inside that turn, even when a later step looks trivial in isolation. The next
 human message starts fresh.
+
+## Optional: a learned semantic scorer
+
+The rule lexicon matches phrases, which is the weakest part of this router.
+`ml/` builds a dataset and trains a linear model over static sentence
+embeddings that reads the whole request instead.
+
+```toml
+[semantic]
+enabled    = true
+model_path = "~/.claude/model-router/model.npz"
+weight     = 0.6
+```
+
+Measured on 72 hand-labelled prompts, trained on synthetic seed data only:
+
+| features | accuracy | under-route | routing cost |
+|---|---|---|---|
+| structural signals only | 0.458 | 0.542 | 0.653 |
+| embeddings only | 0.694 | 0.097 | 0.214 |
+| **both** | **0.764** | **0.042** | **0.146** |
+
+Routing cost prices the asymmetry -- an under-route costs a retry, an
+over-route costs a few cents. Scoring takes ~0.1 ms with no torch loaded, so it
+fits in front of every API call. The model votes as one more score and can
+never undercut a floor. Set `policy.explore_rate = 0.05` first: it is what makes
+the training data unbiased. Full method in [`ml/README.md`](ml/README.md).
 
 ## Optional: a local LLM as tiebreaker
 
@@ -234,12 +268,20 @@ model-router/
 ├── src/ccrouter/
 │   ├── signals.py      request body -> features (the conversation's shape)
 │   ├── rules.py        features -> scored, floored, explained verdict
+│   ├── semantic.py     optional learned scorer (numpy, ~0.1 ms/prompt)
 │   ├── classifier.py   optional local-LLM tiebreaker, fail-open
-│   ├── router.py       turn stickiness, escalation ratchet, decision log
+│   ├── router.py       turn stickiness, escalation ratchet, exploration, log
 │   ├── proxy.py        the ANTHROPIC_BASE_URL reverse proxy
 │   └── cli.py          serve / explain / stats / doctor
 ├── hooks/advise.py     UserPromptSubmit advisory mode (no proxy needed)
 ├── agents/quick.md     Haiku subagent the advisory hook delegates to
-├── prompts/classify.md the editable classifier prompt
-└── tests/              45 tests, stdlib unittest, real sockets
+├── prompts/classify.md the editable local-LLM prompt
+├── ml/                 dataset construction + training (offline, see ml/README.md)
+│   ├── taxonomy.py     24 archetypes, 42 minimal pairs across all tier boundaries
+│   ├── seed.py         synthetic bootstrap, train-only by construction
+│   ├── mine.py         outcome labels from the decision log
+│   ├── label.py        Claude Opus 5 distillation via the Batch API
+│   ├── golden.py       hand-labelled test set, the only honest number
+│   └── train.py        ablation, asymmetric cost metric, numpy export
+└── tests/              77 tests, stdlib unittest, real sockets
 ```
