@@ -1,0 +1,66 @@
+# Place at .github/workflows/e2e.yml, then make "e2e" a required status check
+# in branch protection so no PR merges with a failing scenario.
+name: e2e
+
+on:
+  pull_request:
+  push:
+    branches: [main]                  # ADAPT: default branch
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write                       # for the JUnit report annotation
+
+jobs:
+  scenarios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]                 # ADAPT: add shards when one passes ~8 minutes
+    env:
+      COMPOSE: docker compose -f e2e/docker-compose.e2e.yml
+      RUNNER: uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml
+    steps:
+      - uses: actions/checkout@v4     # pin current majors; check each action's releases page
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Start Postgres and the Dynamics mock
+        run: $COMPOSE up -d --wait postgres wiremock
+
+      - name: Create and migrate the e2e database
+        run: $RUNNER prepare
+
+      - name: Build and start the application
+        run: $COMPOSE up -d --build --wait app
+
+      - name: Run scenarios (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+        run: $RUNNER run --shard ${{ matrix.shard }}/${{ strategy.job-total }} --junit e2e/out/junit-${{ matrix.shard }}.xml --capture e2e/out/actual
+
+      - name: Collect diagnostics
+        if: failure()
+        run: |
+          mkdir -p e2e/out
+          $COMPOSE logs --no-color > e2e/out/compose.log 2>&1 || true
+          curl -fs http://localhost:8080/__admin/requests > e2e/out/wiremock-journal.json || true
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-shard-${{ matrix.shard }}
+          path: e2e/out/
+          retention-days: 14
+
+      - name: Publish test report
+        if: always()
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: e2e/out/junit-*.xml
+          check_name: e2e scenarios (shard ${{ matrix.shard }})

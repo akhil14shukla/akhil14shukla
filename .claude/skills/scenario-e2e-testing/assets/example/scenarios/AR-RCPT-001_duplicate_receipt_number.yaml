@@ -1,0 +1,16 @@
+id: AR-RCPT-001
+title: The same bank receipt imported twice is rejected the second time
+tags: [ingestion, duplicate, negative]
+given:
+  rows:
+    receipts:
+      - {receipt_no: R-0006, customer_no: C001, currency: USD, amount: 100, unapplied_amount: 100, received_on: 2026-03-19}
+when:
+  - request:
+      method: POST
+      path: /receipts
+      json: {receipt_no: R-0006, customer_no: C001, currency: USD, amount: "100.00", received_on: 2026-03-19}
+    expect: {status: 409, json: {error: duplicate receipt_no}}
+then:
+  db:
+    receipts: {count: 1}

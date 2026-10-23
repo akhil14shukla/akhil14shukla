@@ -1,0 +1,10 @@
+{
+  "name": "Entra ID rejects the client secret (expired or rotated secret)",
+  "priority": 1,
+  "request": { "method": "POST", "urlPathPattern": "/[^/]+/oauth2/v2\\.0/token" },
+  "response": {
+    "status": 401,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "error": "invalid_client", "error_description": "AADSTS7000222: The provided client secret keys for app '00000000-0000-0000-0000-000000000000' are expired.", "error_codes": [7000222] }
+  }
+}

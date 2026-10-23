@@ -1,0 +1,46 @@
+{
+  "mappings": [
+    {
+      "name": "F&O: create customer payment journal header (default)",
+      "priority": 10,
+      "request": {
+        "method": "POST",
+        "urlPath": "/data/CustomerPaymentJournalHeaders",
+        "headers": { "Authorization": { "equalTo": "Bearer e2e-token" } }
+      },
+      "response": {
+        "status": 201,
+        "headers": { "Content-Type": "application/json; odata.metadata=minimal", "OData-Version": "4.0" },
+        "jsonBody": { "@odata.etag": "W/\"JzEsNTYzNzE0NDU3Nic=\"", "dataAreaId": "usmf", "JournalBatchNumber": "CPJ-000001", "JournalName": "CustPay" }
+      }
+    },
+    {
+      "name": "F&O: create customer payment journal line (default)",
+      "priority": 10,
+      "request": {
+        "method": "POST",
+        "urlPath": "/data/CustomerPaymentJournalLines",
+        "headers": { "Authorization": { "equalTo": "Bearer e2e-token" } }
+      },
+      "response": {
+        "status": 201,
+        "headers": { "Content-Type": "application/json; odata.metadata=minimal", "OData-Version": "4.0" },
+        "jsonBody": { "dataAreaId": "usmf", "JournalBatchNumber": "CPJ-000001", "LineNumber": 1 }
+      }
+    },
+    {
+      "name": "F&O: post journal via custom service (default). Rename to your service group/operation.",
+      "priority": 10,
+      "request": {
+        "method": "POST",
+        "urlPath": "/api/services/ARIntegrationServices/ARPostingService/postJournal",
+        "headers": { "Authorization": { "equalTo": "Bearer e2e-token" } }
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "Voucher": "VCH-000001" }
+      }
+    }
+  ]
+}

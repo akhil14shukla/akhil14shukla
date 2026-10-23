@@ -1,6 +1,6 @@
 # Engineering skills
 
-Eight skills that carry a consistent engineering standard into every coding
+Nine skills that carry a consistent engineering standard into every coding
 session, so it does not have to be re-typed as a prompt each time. They are
 written to be usable by any model: concrete rules with the reasoning attached,
 worked before/after examples, decision tables, and executable scripts for the
@@ -30,6 +30,7 @@ repeating them, so only what is relevant loads.
 | **perf-engineering** | Measure-first method, design-time performance, complexity, N+1 and I/O, caching, memory, cost | Something is slow, expensive, or memory-hungry; designing something whose speed matters |
 | **docs-craft** | README, CONTRIBUTING, CHANGELOG, docstrings, ADRs, `docs/` by Diátaxis mode | Writing documentation, or finishing something someone else will use |
 | **ship-quality** | Self-review, running the repo's gates, security sweep, Conventional Commits, PR description, honest reporting | Before committing, before a PR, "is this ready" |
+| **scenario-e2e-testing** | Known-state E2E: hand-written Postgres state in, real API calls, exact rows and ERP (Dynamics 365) calls out; WireMock fakes, runner, CI gate, AR case catalogue | Replacing manual regression testing, seeded-DB tests, mocking Dynamics, "run e2e on every PR" |
 
 A typical project touches four in sequence: `codebase-recon` or `repo-architect`
 to orient, `python-engineering` or `code-craft` to write, `testing-craft`
@@ -111,12 +112,12 @@ Three levels, each paid for only when it earns its place:
 
 | Level | What | Cost |
 |---|---|---|
-| 1 — always | Eight descriptions in the skill listing | ~1,100 tokens total |
+| 1 — always | Nine descriptions in the skill listing | ~1,300 tokens total |
 | 2 — on trigger | One `SKILL.md` core | ~900–1,500 tokens |
 | 3 — on demand | One reference, routed to by task | ~200–3,900 tokens |
 
 A session that orients, writes, and ships costs roughly 5–6k tokens of skill
-context. Carrying all eight skills in full would cost ~64k. Run
+context. Carrying all nine skills in full would cost ~85k. Run
 `python context_cost.py` for the current numbers; it fails if a core has grown
 past budget.
 

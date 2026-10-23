@@ -1,0 +1,37 @@
+# Azure DevOps equivalent. Add as a pipeline and set it as a required build
+# validation policy on the target branch.
+trigger:
+  branches: {include: [main]}         # ADAPT
+pr:
+  branches: {include: ['*']}
+
+pool: {vmImage: ubuntu-latest}
+
+strategy:
+  parallel: 2                         # shards; System.JobPositionInPhase is 1-based
+
+variables:
+  COMPOSE: docker compose -f e2e/docker-compose.e2e.yml
+  RUNNER: uvx --with "psycopg[binary]" --with pyyaml python e2e/scenario_runner.py --config e2e/e2e.config.yaml
+
+steps:
+  - checkout: self
+  - script: curl -LsSf https://astral.sh/uv/install.sh | sh && echo "##vso[task.prependpath]$HOME/.local/bin"
+    displayName: Install uv
+  - script: $(COMPOSE) up -d --wait postgres wiremock
+    displayName: Start Postgres and the Dynamics mock
+  - script: $(RUNNER) prepare
+    displayName: Create and migrate the e2e database
+  - script: $(COMPOSE) up -d --build --wait app
+    displayName: Build and start the application
+  - script: $(RUNNER) run --shard $(System.JobPositionInPhase)/$(System.TotalJobsInPhase) --junit e2e/out/junit.xml --capture e2e/out/actual
+    displayName: Run scenarios
+  - script: $(COMPOSE) logs --no-color > e2e/out/compose.log 2>&1; curl -fs http://localhost:8080/__admin/requests > e2e/out/wiremock-journal.json
+    displayName: Collect diagnostics
+    condition: failed()
+  - task: PublishTestResults@2
+    condition: always()
+    inputs: {testResultsFormat: JUnit, testResultsFiles: e2e/out/junit.xml, testRunTitle: e2e scenarios}
+  - publish: e2e/out
+    artifact: e2e-$(System.JobPositionInPhase)
+    condition: always()

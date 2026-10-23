@@ -1,0 +1,6 @@
+{
+  "name": "F&O posting service unavailable on every call (503): retries exhaust, receipt must not be marked posted",
+  "priority": 1,
+  "request": { "method": "POST", "urlPath": "/api/services/ARIntegrationServices/ARPostingService/postJournal" },
+  "response": { "status": 503, "headers": { "Retry-After": "0" }, "body": "Service Unavailable" }
+}

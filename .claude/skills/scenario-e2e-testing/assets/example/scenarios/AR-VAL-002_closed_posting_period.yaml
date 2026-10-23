@@ -1,0 +1,19 @@
+id: AR-VAL-002
+title: Posting is refused when today's accounting period is closed
+tags: [validation, period-close, negative]
+clock: 2026-04-02T08:00:00Z
+given:
+  sql: [../fixtures/two_open_invoices_c001.sql]
+  rows:
+    closed_periods: [{period: "2026-04"}]
+    receipts:
+      - {id: 1, receipt_no: R-0202, customer_no: C001, currency: USD, amount: 1000, unapplied_amount: 0, received_on: 2026-03-31, status: matched}
+    allocations:
+      - {receipt_id: 1, invoice_id: 1, amount: 1000}
+when:
+  - request: {method: POST, path: /receipts/1/post}
+    expect: {status: 422, json: {error: posting period 2026-04 is closed}}
+then:
+  db_unchanged: [receipts]
+  erp_requests:
+    - {url_path_pattern: ".*", count: 0}

@@ -1,0 +1,6 @@
+{
+  "name": "F&O drops the connection on post: the outcome in D365 is unknown to the app",
+  "priority": 1,
+  "request": { "method": "POST", "urlPath": "/api/services/ARIntegrationServices/ARPostingService/postJournal" },
+  "response": { "fault": "CONNECTION_RESET_BY_PEER" }
+}

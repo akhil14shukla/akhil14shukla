@@ -1,0 +1,16 @@
+{
+  "name": "F&O rejects a journal line with an OData validation error (400)",
+  "priority": 1,
+  "request": { "method": "POST", "urlPath": "/data/CustomerPaymentJournalLines" },
+  "response": {
+    "status": 400,
+    "headers": { "Content-Type": "application/json; odata.metadata=minimal", "OData-Version": "4.0" },
+    "jsonBody": {
+      "error": {
+        "code": "",
+        "message": "Write failed for table row of type 'CustCustomerPaymentJournalLineEntity'. Infolog: Error: Customer account C001 is on hold for all transactions.",
+        "innererror": { "message": "Write failed for table row of type 'CustCustomerPaymentJournalLineEntity'.", "type": "Microsoft.Dynamics.Platform.Integration.Services.OData.AxODataWriteException" }
+      }
+    }
+  }
+}

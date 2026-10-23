@@ -1,0 +1,23 @@
+id: AR-MATCH-006
+title: Receipt quoting two invoices but too small for both pays the oldest-due invoice first
+tags: [matching, multi-invoice, allocation-order]
+# Added after a mutation round: reversing the allocation order passed every other scenario.
+clock: 2026-03-20T09:00:00Z
+given:
+  sql: [../fixtures/two_open_invoices_c001.sql]
+when:
+  - request:
+      method: POST
+      path: /receipts
+      json: {receipt_no: R-0007, customer_no: C001, currency: USD, amount: "1100.00", reference: "INV-1002 INV-1001", received_on: 2026-03-19}
+    expect: {status: 201}
+    save: {receipt_id: $.id}
+  - request: {method: POST, path: "/receipts/{{receipt_id}}/match"}
+    expect: {status: 200, json: {status: matched}}
+then:
+  db:
+    invoices:
+      order_by: invoice_no
+      rows:
+        - {invoice_no: INV-1001, open_amount: 0, status: paid}
+        - {invoice_no: INV-1002, open_amount: 150, status: partially_paid}

@@ -1,0 +1,31 @@
+# Harness configuration for the example AR service. Copy to <repo>/e2e/ and adapt.
+database:
+  admin_dsn: ${E2E_ADMIN_DSN:-postgresql://postgres:postgres@localhost:5432/postgres}
+  dsn: ${E2E_DSN:-postgresql://postgres:postgres@localhost:5432/ar_e2e}
+  reset: truncate                     # truncate (app keeps its pool) | template (clone per scenario)
+  template: ar_e2e_template           # only used by reset: template
+  schemas: [public]
+  keep_tables: []                     # e.g. alembic_version, flyway_schema_history, __EFMigrationsHistory
+  # migrate_command: alembic upgrade head   # real projects: the app's own migrations, gets DATABASE_URL
+  url_env: DATABASE_URL
+  schema_files: [schema.sql]          # example only: stands in for migrate_command
+  base_seed: [seed_base.sql]
+
+app:
+  base_url: ${E2E_APP_URL:-http://localhost:8000}
+  headers: {}                         # e.g. {Authorization: "Bearer ${E2E_API_TOKEN}"}
+  ready: {path: /health, timeout_s: 30}
+  clock: {method: PUT, path: /__test/clock, json: {now: "{{clock}}"}}
+
+erp_mock:
+  admin_url: ${E2E_WIREMOCK_URL:-http://localhost:8080}
+
+snapshot:                             # used by db_unchanged and --capture
+  ignore_columns: [created_at, updated_at]
+  tables:
+    customers:   {key: [customer_no]}
+    invoices:    {key: [invoice_no]}
+    receipts:    {key: [receipt_no]}
+    allocations: {key: [receipt_id, invoice_id]}
+
+scenarios: [scenarios/**/*.yaml]

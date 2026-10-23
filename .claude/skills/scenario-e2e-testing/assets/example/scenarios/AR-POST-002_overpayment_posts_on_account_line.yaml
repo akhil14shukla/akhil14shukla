@@ -1,0 +1,19 @@
+id: AR-POST-002
+title: Partially matched receipt posts the unapplied excess as an on-account line
+tags: [posting, msd, overpayment]
+clock: 2026-03-20T09:00:00Z
+given:
+  sql: [../fixtures/two_open_invoices_c001.sql]
+  rows:
+    receipts:
+      - {id: 1, receipt_no: R-0102, customer_no: C001, currency: USD, amount: 300, unapplied_amount: 50, reference: INV-1002, received_on: 2026-03-19, status: partially_matched}
+    allocations:
+      - {receipt_id: 1, invoice_id: 2, amount: 250}
+when:
+  - request: {method: POST, path: /receipts/1/post}
+    expect: {status: 200, json: {status: posted}}
+then:
+  erp_requests:
+    - {method: POST, url_path: /data/CustomerPaymentJournalLines, count: 1, json: {MarkedInvoice: INV-1002, CreditAmount: 250}}
+    - {method: POST, url_path: /data/CustomerPaymentJournalLines, count: 1, json: {MarkedInvoice: "", CreditAmount: 50}}
+    - {method: POST, url_path: /data/CustomerPaymentJournalLines, count: 2}

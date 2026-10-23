@@ -1,0 +1,10 @@
+{
+  "name": "F&O throttles every header call: the app must give up after its retry budget",
+  "priority": 1,
+  "request": { "method": "POST", "urlPath": "/data/CustomerPaymentJournalHeaders" },
+  "response": {
+    "status": 429,
+    "headers": { "Retry-After": "0", "Content-Type": "application/json" },
+    "jsonBody": { "error": { "code": "", "message": "Number of requests exceeded the limit of 6000 over time window of 300 seconds." } }
+  }
+}

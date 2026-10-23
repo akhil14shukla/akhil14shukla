@@ -1,0 +1,14 @@
+id: AR-VAL-004
+title: An unmatched receipt cannot be posted
+tags: [validation, negative]
+given:
+  rows:
+    receipts:
+      - {id: 1, receipt_no: R-0204, customer_no: C001, currency: USD, amount: 75, unapplied_amount: 75, received_on: 2026-03-19}
+when:
+  - request: {method: POST, path: /receipts/1/post}
+    expect: {status: 422, json: {error: "{{contains:only matched receipts}}"}}
+then:
+  db_unchanged: [receipts]
+  erp_requests:
+    - {url_path_pattern: ".*", count: 0}
