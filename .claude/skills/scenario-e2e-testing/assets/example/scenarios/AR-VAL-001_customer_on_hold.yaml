@@ -1,0 +1,19 @@
+id: AR-VAL-001
+title: Receipt for a customer on credit hold is refused before anything is sent to Dynamics
+tags: [validation, negative]
+clock: 2026-03-20T09:00:00Z
+given:
+  rows:
+    invoices:
+      - {id: 1, invoice_no: INV-9001, customer_no: C900, currency: USD, amount: 500, open_amount: 0, due_date: 2026-03-01, status: paid}
+    receipts:
+      - {id: 1, receipt_no: R-0201, customer_no: C900, currency: USD, amount: 500, unapplied_amount: 0, received_on: 2026-03-19, status: matched}
+    allocations:
+      - {receipt_id: 1, invoice_id: 1, amount: 500}
+when:
+  - request: {method: POST, path: /receipts/1/post}
+    expect: {status: 422, json: {error: customer is on hold}}
+then:
+  db_unchanged: [receipts, invoices, allocations]
+  erp_requests:
+    - {url_path_pattern: ".*", count: 0}

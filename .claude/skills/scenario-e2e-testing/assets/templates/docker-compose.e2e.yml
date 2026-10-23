@@ -1,0 +1,55 @@
+# E2E stack: Postgres (same major version as production), WireMock standing in
+# for Entra ID + Dynamics 365, and the application under test.
+# Place at <repo>/e2e/docker-compose.e2e.yml. Adapt every line marked ADAPT.
+name: ar-e2e
+
+services:
+  postgres:
+    image: postgres:16            # ADAPT: production major version, never "latest"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    # Durability off: this data is thrown away after every scenario. Never copy these flags to production.
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off",
+              "-c", "max_connections=200", "-c", "timezone=UTC"]
+    tmpfs: ["/var/lib/postgresql/data"]
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  wiremock:
+    image: wiremock/wiremock:3.13.1   # ADAPT: pin the current release; check hub.docker.com/r/wiremock/wiremock
+    command: ["--disable-banner", "--port", "8080"]
+    volumes:
+      - ./wiremock:/home/wiremock     # expects ./wiremock/mappings/*.json (defaults loaded on boot)
+    ports: ["8080:8080"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/__admin/health || wget -qO- http://localhost:8080/__admin/health || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build:
+      context: ..                     # ADAPT: path to the application's Dockerfile context
+    environment:                      # ADAPT: the app's real config keys
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ar_e2e
+      MSD_BASE_URL: http://wiremock:8080
+      MSD_TOKEN_URL: http://wiremock:8080/tenant/oauth2/v2.0/token   # Entra authority, pointed at the fake
+      MSD_CLIENT_ID: e2e
+      MSD_CLIENT_SECRET: e2e
+      E2E_TEST_HOOKS: "1"             # enables /__test/* routes; the app must refuse this in production
+      TZ: UTC
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      wiremock: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8000/health || exit 1"]   # ADAPT: health route; image needs curl
+      interval: 2s
+      timeout: 3s
+      retries: 60

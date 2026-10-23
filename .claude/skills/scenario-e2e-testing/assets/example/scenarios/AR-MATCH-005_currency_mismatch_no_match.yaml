@@ -1,0 +1,20 @@
+id: AR-MATCH-005
+title: Receipt in a different currency from every open invoice stays unmatched and touches nothing
+tags: [matching, currency, negative]
+clock: 2026-03-20T09:00:00Z
+given:
+  sql: [../fixtures/two_open_invoices_c001.sql]
+when:
+  - request:
+      method: POST
+      path: /receipts
+      json: {receipt_no: R-0005, customer_no: C001, currency: EUR, amount: "1000.00", reference: "INV-1001", received_on: 2026-03-19}
+    expect: {status: 201}
+    save: {receipt_id: $.id}
+  - request: {method: POST, path: "/receipts/{{receipt_id}}/match"}
+    expect: {status: 200, json: {status: unmatched}}
+then:
+  db:
+    receipts: {rows: [{receipt_no: R-0005, status: unmatched, unapplied_amount: 1000}]}
+    allocations: {count: 0}
+  db_unchanged: [invoices, customers]

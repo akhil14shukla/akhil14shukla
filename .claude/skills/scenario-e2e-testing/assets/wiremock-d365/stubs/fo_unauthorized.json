@@ -1,0 +1,6 @@
+{
+  "name": "F&O returns 401: token accepted by Entra but the app user is missing or disabled in D365",
+  "priority": 1,
+  "request": { "method": "POST", "urlPathPattern": "/data/.*" },
+  "response": { "status": 401, "headers": { "WWW-Authenticate": "Bearer" } }
+}

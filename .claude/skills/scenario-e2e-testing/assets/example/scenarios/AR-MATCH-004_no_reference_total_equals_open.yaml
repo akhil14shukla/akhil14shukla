@@ -1,0 +1,25 @@
+id: AR-MATCH-004
+title: Receipt with no reference equal to the customer's total open balance clears all invoices, oldest first
+tags: [matching, multi-invoice]
+clock: 2026-03-20T09:00:00Z
+given:
+  sql: [../fixtures/two_open_invoices_c001.sql]
+when:
+  - request:
+      method: POST
+      path: /receipts
+      json: {receipt_no: R-0004, customer_no: C001, currency: USD, amount: "1250.00", received_on: 2026-03-19}
+    expect: {status: 201}
+    save: {receipt_id: $.id}
+  - request: {method: POST, path: "/receipts/{{receipt_id}}/match"}
+    expect: {status: 200, json: {status: matched}}
+then:
+  db:
+    invoices:
+      order_by: invoice_no
+      rows:
+        - {invoice_no: INV-1001, open_amount: 0, status: paid}
+        - {invoice_no: INV-1002, open_amount: 0, status: paid}
+    allocations:
+      order_by: invoice_id
+      rows: [{amount: 1000}, {amount: 250}]

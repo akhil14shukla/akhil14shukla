@@ -1,0 +1,22 @@
+id: AR-MATCH-002
+title: Short payment leaves the referenced invoice partially paid
+tags: [matching, short-pay]
+clock: 2026-03-20T09:00:00Z
+given:
+  sql: [../fixtures/two_open_invoices_c001.sql]
+when:
+  - request:
+      method: POST
+      path: /receipts
+      json: {receipt_no: R-0002, customer_no: C001, currency: USD, amount: "990.00", reference: "INV-1001", received_on: 2026-03-19}
+    expect: {status: 201}
+    save: {receipt_id: $.id}
+  - request: {method: POST, path: "/receipts/{{receipt_id}}/match"}
+    expect: {status: 200, json: {status: matched}}
+then:
+  db:
+    receipts: {rows: [{receipt_no: R-0002, status: matched, unapplied_amount: 0}]}
+    invoices:
+      rows:
+        - {invoice_no: INV-1001, open_amount: 10.00, status: partially_paid}
+        - {invoice_no: INV-1002, open_amount: 250.00, status: open}

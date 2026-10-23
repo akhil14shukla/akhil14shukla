@@ -1,0 +1,13 @@
+{
+  "name": "F&O throttles the first header call (429 + Retry-After), then falls through to the default",
+  "priority": 1,
+  "scenarioName": "throttle-header",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "throttled-once",
+  "request": { "method": "POST", "urlPath": "/data/CustomerPaymentJournalHeaders" },
+  "response": {
+    "status": 429,
+    "headers": { "Retry-After": "0", "Content-Type": "application/json" },
+    "jsonBody": { "error": { "code": "", "message": "Number of requests exceeded the limit of 6000 over time window of 300 seconds." } }
+  }
+}

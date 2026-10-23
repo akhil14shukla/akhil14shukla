@@ -1,0 +1,14 @@
+{
+  "name": "Entra ID client-credentials token (default: always succeeds)",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/[^/]+/oauth2/v2\\.0/token",
+    "bodyPatterns": [{ "contains": "grant_type=client_credentials" }]
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "token_type": "Bearer", "expires_in": 3599, "ext_expires_in": 3599, "access_token": "e2e-token" }
+  }
+}

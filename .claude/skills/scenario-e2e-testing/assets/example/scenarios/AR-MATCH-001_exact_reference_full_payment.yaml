@@ -1,0 +1,30 @@
+id: AR-MATCH-001
+title: Receipt quoting an invoice number pays that invoice in full
+tags: [matching, happy-path]
+clock: 2026-03-20T09:00:00Z
+given:
+  sql: [../fixtures/two_open_invoices_c001.sql]
+when:
+  - name: record receipt
+    request:
+      method: POST
+      path: /receipts
+      json: {receipt_no: R-0001, customer_no: C001, currency: USD, amount: "1000.00", reference: "Payment INV-1001", received_on: 2026-03-19}
+    expect: {status: 201, json: {status: unmatched}}
+    save: {receipt_id: $.id}
+  - name: auto-match
+    request: {method: POST, path: "/receipts/{{receipt_id}}/match"}
+    expect: {status: 200, json: {status: matched, unapplied_amount: "0.00"}}
+then:
+  db:
+    receipts:
+      rows: [{receipt_no: R-0001, status: matched, unapplied_amount: 0, msd_voucher: null}]
+    invoices:
+      rows:
+        - {invoice_no: INV-1001, open_amount: 0, status: paid}
+        - {invoice_no: INV-1002, open_amount: 250, status: open}
+    allocations:
+      rows: [{receipt_id: "{{receipt_id}}", amount: 1000}]
+  db_unchanged: [customers]
+  erp_requests:
+    - {url_path_pattern: ".*", count: 0}     # matching never talks to Dynamics
