@@ -19,7 +19,7 @@ steps:
   - script: curl -LsSf https://astral.sh/uv/install.sh | sh && echo "##vso[task.prependpath]$HOME/.local/bin"
     displayName: Install uv
   - script: $(COMPOSE) up -d --wait postgres wiremock
-    displayName: Start Postgres and the Dynamics mock
+    displayName: Start Postgres and the external-system mocks
   - script: $(RUNNER) prepare
     displayName: Create and migrate the e2e database
   - script: $(COMPOSE) up -d --build --wait app

@@ -17,7 +17,7 @@ app:
   ready: {path: /health, timeout_s: 30}
   clock: {method: PUT, path: /__test/clock, json: {now: "{{clock}}"}}
 
-erp_mock:
+mock:
   admin_url: ${E2E_WIREMOCK_URL:-http://localhost:8080}
 
 snapshot:                             # used by db_unchanged and --capture

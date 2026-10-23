@@ -16,18 +16,18 @@ or Docker for WireMock, and a Postgres 14+ reachable as
 SKILL=.claude/skills/scenario-e2e-testing      # adjust to where the skill lives
 
 # 1. WireMock with the D365 default mappings (pick one)
-docker run -d --name wm -p 8080:8080 -v "$PWD/$SKILL/assets/wiremock-d365:/home/wiremock" wiremock/wiremock:3.13.1
-# java -jar wiremock-standalone-3.13.1.jar --port 8080 --root-dir $SKILL/assets/wiremock-d365
+docker run -d --name wm -p 8080:8080 -v "$PWD/$SKILL/use-cases/dynamics-365-ar/wiremock-d365:/home/wiremock" wiremock/wiremock:3.13.1
+# java -jar wiremock-standalone-3.13.1.jar --port 8080 --root-dir $SKILL/use-cases/dynamics-365-ar/wiremock-d365
 
 # 2. Database
-uv run $SKILL/scripts/scenario_runner.py --config $SKILL/assets/example/e2e.config.yaml prepare
+uv run $SKILL/scripts/scenario_runner.py --config $SKILL/use-cases/dynamics-365-ar/example/e2e.config.yaml prepare
 
 # 3. The app, with test hooks on
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ar_e2e MSD_BASE_URL=http://localhost:8080 \
-  E2E_TEST_HOOKS=1 uv run $SKILL/assets/example/app.py &
+  E2E_TEST_HOOKS=1 uv run $SKILL/use-cases/dynamics-365-ar/example/app.py &
 
 # 4. Scenarios
-uv run $SKILL/scripts/scenario_runner.py --config $SKILL/assets/example/e2e.config.yaml run
+uv run $SKILL/scripts/scenario_runner.py --config $SKILL/use-cases/dynamics-365-ar/example/e2e.config.yaml run
 ```
 
 Expected: `17/17 scenarios passed`, about 0.2 s each.
@@ -51,7 +51,7 @@ Expected: `17/17 scenarios passed`, about 0.2 s each.
 Break the app on purpose and watch the right scenario fail:
 
 ```bash
-sed -i 's/if receipt\["on_hold"\]:/if False:/' $SKILL/assets/example/app.py   # drop the credit-hold check
+sed -i 's/if receipt\["on_hold"\]:/if False:/' $SKILL/use-cases/dynamics-365-ar/example/app.py   # drop the credit-hold check
 # restart the app, run the scenarios: AR-VAL-001 fails ("expected HTTP 422, got 200")
-git checkout -- $SKILL/assets/example/app.py
+git checkout -- $SKILL/use-cases/dynamics-365-ar/example/app.py
 ```

@@ -12,5 +12,5 @@ when:
     expect: {status: 409, json: {voucher: VCH-000777}}
 then:
   db_unchanged: [receipts]
-  erp_requests:
+  mock_requests:
     - {url_path_pattern: ".*", count: 0}

@@ -1,0 +1,32 @@
+# Scenario runner configuration. Copy to <repo>/e2e/e2e.config.yaml and adapt
+# every line marked ADAPT. Paths are relative to this file. ${VAR:-default}
+# values are read from the environment, so CI can override them.
+
+database:
+  admin_dsn: ${E2E_ADMIN_DSN:-postgresql://postgres:postgres@localhost:5432/postgres}
+  dsn: ${E2E_DSN:-postgresql://postgres:postgres@localhost:5432/app_e2e}   # ADAPT: db name
+  reset: truncate                     # truncate (app keeps its pool) | template (clone per scenario)
+  template: app_e2e_template          # only used by reset: template
+  schemas: [public]                   # ADAPT: every schema the app writes to
+  keep_tables: []                     # ADAPT: migration history, e.g. alembic_version, flyway_schema_history, __EFMigrationsHistory
+  migrate_command: "<the app's migration command>"   # ADAPT: see database-and-fixtures.md §2; receives the DSN in url_env
+  url_env: DATABASE_URL               # ADAPT: env var the migration tool reads
+  # schema_files: [../db/schema.sql]  # instead of migrate_command, for raw-SQL schemas
+  base_seed: [seed/base_reference_data.sql]
+
+app:
+  base_url: ${E2E_APP_URL:-http://localhost:8000}    # ADAPT: port
+  headers: {}                         # ADAPT: e.g. {Authorization: "Bearer ${E2E_API_TOKEN:-e2e-api-token}"}
+  ready: {path: /health, timeout_s: 60}              # ADAPT: health route
+  clock: {method: PUT, path: /__test/clock, json: {now: "{{clock}}"}}   # remove if the app has no clock hook yet
+
+mock:                                 # remove the whole section if the app calls no external HTTP system
+  admin_url: ${E2E_WIREMOCK_URL:-http://localhost:8080}
+
+snapshot:                             # used by db_unchanged and --capture
+  ignore_columns: [created_at, updated_at]           # ADAPT: columns filled by DB defaults / triggers
+  tables:                             # ADAPT: the tables of the flow under test, with their natural keys
+    customers: {key: [customer_no]}
+    orders:    {key: [order_no]}
+
+scenarios: [scenarios/**/*.yaml]

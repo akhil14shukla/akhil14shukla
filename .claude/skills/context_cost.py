@@ -67,6 +67,11 @@ def load(skills_dir: Path) -> list[Skill]:
             str(p.relative_to(skill_md.parent / "references")): p.read_text(encoding="utf-8")
             for p in sorted((skill_md.parent / "references").rglob("*.md"))
         }
+        # Use-case packs are read on demand like references, so they count as level 3.
+        refs |= {
+            str(p.relative_to(skill_md.parent)): p.read_text(encoding="utf-8")
+            for p in sorted((skill_md.parent / "use-cases").rglob("*.md"))
+        }
         skills.append(
             Skill(
                 name=skill_md.parent.name,

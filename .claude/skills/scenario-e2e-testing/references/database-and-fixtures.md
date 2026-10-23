@@ -21,8 +21,8 @@ scenario, or keeping fixtures alive through schema changes.
 | Layer | Where | Changes | Contains |
 |---|---|---|---|
 | Schema | the app's migrations (`migrate_command`) | with every migration | tables, constraints, functions, enum values |
-| Base seed | `e2e/seed/*.sql` (`base_seed`) | rarely | legal entities/companies, currencies, payment methods, posting profiles, tolerance settings, a few ordinary customers |
-| Fixtures | `e2e/fixtures/*.sql` | when a shared shape changes | row graphs several scenarios reuse: "customer with two open invoices", "receipt matched to one invoice" |
+| Base seed | `e2e/seed/*.sql` (`base_seed`) | rarely | tenants/companies, currencies, configuration and settings rows, lookup tables, a few ordinary customers |
+| Fixtures | `e2e/fixtures/*.sql` | when a shared shape changes | row graphs several scenarios reuse: "customer with two open orders", "order already paid" |
 | Scenario rows | `given.rows` inline | per scenario | the rows the rule under test is about |
 
 A value a scenario's outcome depends on belongs in the scenario, not in base
@@ -62,23 +62,23 @@ a migration that broke a constraint, a default, or a trigger.
 Write it as plain `INSERT` statements with natural keys, readable in review:
 
 ```sql
-INSERT INTO legal_entities (code, name, msd_data_area_id, base_currency) VALUES
-    ('US01', 'Contoso US', 'usmf', 'USD'),
-    ('GB01', 'Contoso UK', 'gbsi', 'GBP');
+INSERT INTO companies (code, name, external_company_id, base_currency) VALUES
+    ('US01', 'Contoso US', 'us-01', 'USD'),
+    ('GB01', 'Contoso UK', 'gb-01', 'GBP');
 INSERT INTO currencies (code, decimals) VALUES ('USD', 2), ('GBP', 2), ('JPY', 0), ('KWD', 3);
-INSERT INTO match_settings (legal_entity, abs_tolerance, pct_tolerance) VALUES ('US01', 5.00, 0.0);
+INSERT INTO settings (company, key, value) VALUES ('US01', 'auto_approve_limit', '500.00');
 ```
 
-Include currencies with 0 and 3 decimals even if production has none yet: they
-are where rounding bugs live.
+If money is involved, include currencies with 0 and 3 decimals even if
+production has none yet: they are where rounding bugs live.
 
 ## 4. Fixtures: shared row graphs
 
-Name fixtures by the situation, not the test: `two_open_invoices_c001.sql`,
-`receipt_matched_to_inv1001.sql`, `customer_on_hold_c900.sql`. A fixture must be
+Name fixtures by the situation, not the test: `two_open_orders_c001.sql`,
+`order_paid_ord1001.sql`, `customer_blocked_c900.sql`. A fixture must be
 safe to combine with others (distinct keys), so give each fixture its own
-key range: customers `C0xx` ordinary, `C9xx` special status; invoices
-`INV-1xxx` per fixture block.
+key range: customers `C0xx` ordinary, `C9xx` special status; documents
+`ORD-1xxx` per fixture block.
 
 Create a fixture when a third scenario needs the same graph; before that,
 inline rows are clearer.
@@ -98,11 +98,11 @@ inline rows are clearer.
 
 ## 6. Harvesting a production case into a scenario
 
-Every incident, every "finance found this in UAT", every manual test case
+Every incident, every "the business found this in UAT", every manual test case
 becomes a scenario. The goal is the **minimal row graph** that reproduces it,
 not a dump.
 
-1. **Identify the root row** (the receipt, the payment batch).
+1. **Identify the root row** (the order, the payment, the batch).
 2. **Walk its foreign keys** to collect what it touches. List the outgoing FKs
    of a table with:
 
@@ -112,25 +112,25 @@ not a dump.
    FROM pg_constraint c
    JOIN pg_attribute a  ON a.attrelid = c.conrelid  AND a.attnum = ANY (c.conkey)
    JOIN pg_attribute af ON af.attrelid = c.confrelid AND af.attnum = ANY (c.confkey)
-   WHERE c.contype = 'f' AND c.conrelid = 'receipts'::regclass;
+   WHERE c.contype = 'f' AND c.conrelid = 'orders'::regclass;
    ```
 
    Swap `conrelid` for `confrelid` in the `WHERE` to list incoming FKs (child
-   rows such as allocations).
+   rows such as order lines).
 3. **Extract the rows as YAML-ready JSON**, one query per table, on a read
    replica:
 
    ```sql
    SELECT json_agg(t) FROM (
-     SELECT invoice_no, customer_no, currency, amount, open_amount, due_date, status
-     FROM invoices WHERE customer_no = 'C123' AND status <> 'paid') t;
+     SELECT order_no, customer_no, currency, amount, due_date, status
+     FROM orders WHERE customer_no = 'C123' AND status <> 'closed') t;
    ```
 
    Select only the columns that matter, which is also the first anonymisation
    pass.
 4. **Anonymise** (§7) and **rekey** into the fixture key ranges.
 5. **Shift dates** so they sit relative to the scenario `clock`, keeping the
-   same distances (days past due, period boundaries).
+   same distances (days overdue, period boundaries).
 6. **State the correct outcome** with the person who reported it — not what the
    code did. Write it in `then`.
 7. **Run it against the current code and watch it fail for the reported
@@ -160,14 +160,14 @@ Scenarios live in the repository; production data must not. Before commit:
 ## 8. Time, money, and other traps
 
 - **Money is `numeric(p,s)`, never float.** Scenarios compare numbers as
-  decimals, so `1000` matches `1000.00`. If the app sends floats to Dynamics
-  (common in JSON), assert the value it sends: a `CreditAmount` of
+  decimals, so `1000` matches `1000.00`. If the app sends floats to an external
+  API (common in JSON), assert the value it sends: an amount of
   `0.30000000000000004` is a bug worth a scenario.
 - **Rounding**: half-up vs half-even (banker's) differ at `.005`. Write one
   scenario per currency decimals class.
-- **Dates vs timestamps**: posting date is a *date* in the legal entity's
-  calendar. A receipt at `2026-03-31T23:30:00-05:00` is March in New York and
-  April in UTC. Scenario: clock at that instant, assert the posting period.
+- **Dates vs timestamps**: a business date lives in a company's time zone.
+  An event at `2026-03-31T23:30:00-05:00` is March in New York and April in
+  UTC. Scenario: clock at that instant, assert the period the app chose.
 - **Column defaults using `now()`** are not controlled by the app's clock; put
   them in `snapshot.ignore_columns` and assert with `{{iso_datetime}}` if at all.
 - **Sequences** are restarted per scenario; explicit ids in `rows` do not

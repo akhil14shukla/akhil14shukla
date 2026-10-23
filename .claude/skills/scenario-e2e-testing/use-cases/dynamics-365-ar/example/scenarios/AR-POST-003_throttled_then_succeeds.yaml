@@ -9,7 +9,7 @@ given:
       - {id: 1, receipt_no: R-0103, customer_no: C001, currency: USD, amount: 1000, unapplied_amount: 0, received_on: 2026-03-19, status: matched}
     allocations:
       - {receipt_id: 1, invoice_id: 1, amount: 1000}
-  erp_stubs:
+  mock_stubs:
     - file: ../../wiremock-d365/stubs/fo_header_throttled_once.json
 when:
   - request: {method: POST, path: /receipts/1/post}
@@ -17,6 +17,6 @@ when:
 then:
   db:
     receipts: {rows: [{receipt_no: R-0103, status: posted, msd_voucher: VCH-000001}]}
-  erp_requests:
+  mock_requests:
     - {method: POST, url_path: /data/CustomerPaymentJournalHeaders, count: 2}
     - {method: POST, url_path: /api/services/ARIntegrationServices/ARPostingService/postJournal, count: 1}

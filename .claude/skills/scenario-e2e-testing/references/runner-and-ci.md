@@ -27,9 +27,9 @@ It works the same whatever language the application is written in.
 uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml prepare       # create + migrate DB
 uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml list          # ids, tags, files
 uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml run           # everything
-uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml run --filter AR-POST --filter regression
+uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml run --filter ORD-PAY --filter regression
 uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml run --shard 2/4 --junit e2e/out/junit.xml
-uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml run --filter AR-POST-007 --capture e2e/out/actual
+uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml run --filter ORD-PAY-007 --capture e2e/out/actual
 ```
 
 Exit codes: `0` all passed, `1` at least one scenario failed, `2` the harness
@@ -37,7 +37,8 @@ could not run (bad config, app not ready, nothing selected).
 
 ## 2. Configuration reference
 
-Annotated working example: `assets/example/e2e.config.yaml`. `${VAR}` and
+Annotated template: `assets/templates/e2e.config.yaml` (a filled-in, working
+config is in each use-case pack's `example/`). `${VAR}` and
 `${VAR:-default}` are expanded from the environment so CI can override.
 
 | Key | Meaning |
@@ -56,7 +57,7 @@ Annotated working example: `assets/example/e2e.config.yaml`. `${VAR}` and
 | `app.headers` | Sent on every request (auth for the API under test) |
 | `app.ready` | `{path, timeout_s}` polled before the first scenario |
 | `app.clock` | Request template sent when a scenario has `clock` (`{{clock}}` substituted) |
-| `erp_mock.admin_url` | WireMock base URL; omit if the app calls no external system |
+| `mock.admin_url` | WireMock base URL; omit if the app calls no external HTTP system |
 | `snapshot.ignore_columns` | Volatile columns ignored by `db_unchanged` and `--capture` |
 | `snapshot.tables` | Tables `--capture` dumps, with `key` (sort) and per-table `ignore_columns` |
 | `scenarios` | Glob patterns relative to the config file |
@@ -72,7 +73,7 @@ docker compose -f e2e/docker-compose.e2e.yml up -d --wait postgres wiremock
 uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml prepare
 # run the app from your IDE with the e2e env vars (debugger works), or:
 docker compose -f e2e/docker-compose.e2e.yml up -d --build --wait app
-uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml run --filter AR-MATCH
+uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml run --filter ORD-ALLOC
 ```
 
 Running the app from the IDE against the same Postgres and WireMock gives
@@ -92,8 +93,8 @@ e2e:            ## run all scenarios against a fresh stack
 ## 4. CI: gating every pull request
 
 Templates: `assets/templates/github-workflow-e2e.yml` (GitHub Actions) and
-`assets/templates/azure-pipelines-e2e.yml` (Azure DevOps — common in Dynamics
-shops). Both do the same five things:
+`assets/templates/azure-pipelines-e2e.yml` (Azure DevOps — common in
+Microsoft-stack shops). Both do the same five things:
 
 1. Start Postgres and WireMock (`docker compose up -d --wait`).
 2. `prepare` — create and migrate the database.
@@ -114,7 +115,7 @@ Then make it a **gate**:
 Rules that keep the gate trustworthy:
 
 - **Run on every PR**, with no path filters. Changes in "unrelated" config,
-  migrations, or dependency bumps are exactly what breaks posting.
+  migrations, or dependency bumps are exactly what breaks integrations.
 - **No secrets needed.** The stack is hermetic; that is why it can run on fork
   PRs too. If someone adds a real credential to make a scenario pass, the
   design has been broken.
@@ -147,7 +148,7 @@ moves:
 | Discovery | One parametrised test per YAML file (`pytest.mark.parametrize`, xUnit `[Theory] + MemberData`, JUnit `@ParameterizedTest @MethodSource`, Jest `test.each`) named by scenario id |
 | Database | Testcontainers Postgres once per run; per test `CREATE DATABASE t_<worker>_<n> TEMPLATE tpl` and point the app's DI container at it — enables parallel workers |
 | App | Framework test host: FastAPI `TestClient`, ASP.NET `WebApplicationFactory`, Spring `@SpringBootTest(webEnvironment=RANDOM_PORT)`, supertest |
-| ERP fake | Same WireMock (Testcontainers module or standalone) and the same stub files; one WireMock per worker, or isolate by unique `dataAreaId`/path per test |
+| External fakes | Same WireMock (Testcontainers module or standalone) and the same stub files; one WireMock per worker, or isolate by a unique tenant/company/path per test |
 | Clock | Replace the clock service in DI instead of the HTTP hook |
 | Matching rules | Port `match_value` and `check_table` (≈150 lines) from the runner, or call the runner's functions if the app is Python |
 
@@ -174,7 +175,7 @@ The runner is deliberately small (one file) so a project can own it. Common,
 safe extensions:
 
 - **Another external system** (bank API, tax service, email): another WireMock
-  instance or path prefix, and the same `erp_requests` style assertions.
+  instance or path prefix, and the same `mock_requests` style assertions.
 - **Message queues** (Service Bus, RabbitMQ, Kafka): a step type that publishes
   a message, and a `then` key that reads a test-only queue/topic; or have the
   app expose `POST /__test/jobs/consume-once`.

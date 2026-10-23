@@ -26,5 +26,5 @@ then:
     allocations:
       rows: [{receipt_id: "{{receipt_id}}", amount: 1000}]
   db_unchanged: [customers]
-  erp_requests:
+  mock_requests:
     - {url_path_pattern: ".*", count: 0}     # matching never talks to Dynamics

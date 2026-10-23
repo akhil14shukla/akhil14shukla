@@ -1,79 +1,79 @@
 # Annotated scenario template: every key the runner understands, once.
 # Copy, delete what you do not need, and keep one business rule per file.
-# File name: <ID>_<rule_in_snake_case>.yaml, e.g. AR-POST-004_line_rejected_by_dynamics.yaml
+# File name: <ID>_<rule_in_snake_case>.yaml, e.g. ORD-PAY-004_charge_declined_by_provider.yaml
 
-id: AR-AREA-NNN                 # unique, stable, never reused; appears in CI output and JUnit
-title: <condition> → <observable outcome>   # a sentence a finance user would recognise as the rule
-tags: [matching, msd, negative] # used by --filter; tag the incident/ticket too, e.g. INC-2291
+id: SYS-AREA-NNN                # unique, stable, never reused; appears in CI output and JUnit
+title: <condition> → <observable outcome>   # a sentence a domain expert would recognise as the rule
+tags: [payment, negative]       # used by --filter; tag the incident/ticket too, e.g. INC-2291
 # skip: "reason + ticket"       # temporarily excluded; skipped scenarios are listed, never silent
 clock: 2026-03-20T09:00:00Z     # the app's 'now' for this scenario (needs the app's clock hook)
 
 given:
   # Shared fixture files, run in order, relative to this file. Prefer them for row
   # graphs several scenarios share; inline rows for what this scenario is about.
-  sql: [../fixtures/two_open_invoices_c001.sql]
+  sql: [../fixtures/two_open_orders_c001.sql]
   # Inline rows, inserted in the order written (parents before children).
   # Values: strings, numbers, null, dates, nested objects/lists (stored as jsonb).
   rows:
-    receipts:
-      - {id: 1, receipt_no: R-0101, customer_no: C001, currency: USD, amount: 1000, unapplied_amount: 0, received_on: 2026-03-19, status: matched}
-  # How Dynamics behaves for this scenario. Default happy-path mappings are loaded
+    orders:
+      - {id: 1, order_no: ORD-0101, customer_no: C001, currency: EUR, amount: 19.99, status: confirmed}
+  # How external systems behave for this scenario. Default happy-path mappings are loaded
   # by WireMock at boot (priority 10); these override them (use priority 1).
-  erp_stubs:
-    - file: ../../wiremock-d365/stubs/fo_header_throttled_once.json
+  mock_stubs:
+    - file: ../wiremock/stubs/payments/payments_charge_throttled_once.json
     - inline:
         priority: 1
-        request: {method: POST, urlPath: /data/CustomerPaymentJournalLines}
+        request: {method: POST, urlPath: /v1/charges}
         response: {status: 400, jsonBody: {error: {code: "", message: "Exact message copied from production logs"}}}
 
 when:
   # Steps run in order; the first failing step stops the scenario.
-  - name: record receipt                        # optional; shown in failure messages
+  - name: place order                           # optional; shown in failure messages
     request:
       method: POST
-      path: /receipts
+      path: /orders
       headers: {X-Correlation-Id: "{{scenario_id}}"}
-      json: {receipt_no: R-0102, amount: "300.00"}
+      json: {order_no: ORD-0102, customer_no: C001, amount: "30.00", currency: EUR}
       # query: {dryRun: "false"}
       # timeout_s: 30
     expect:
       status: 201
-      json: {status: unmatched}                 # subset match: unlisted keys are ignored
+      json: {status: confirmed}                 # subset match: unlisted keys are ignored
       # body_contains: "..."
-    save: {receipt_id: $.id}                    # later steps and `then` can use {{receipt_id}}
+    save: {order_id: $.id}                      # later steps and `then` can use {{order_id}}
 
-  - request: {method: POST, path: "/receipts/{{receipt_id}}/post"}
+  - request: {method: POST, path: "/orders/{{order_id}}/pay"}
     expect: {status: 200}
 
   # Background work: poll SQL until the value matches (or call a test hook that runs the job now).
-  - wait_for: {sql: "SELECT status FROM receipts WHERE id = {{receipt_id}}", equals: posted, timeout_s: 15}
+  - wait_for: {sql: "SELECT status FROM orders WHERE id = {{order_id}}", equals: paid, timeout_s: 15}
 
-  # Change the world mid-scenario: e.g. Dynamics recovers, or another user edits a row.
-  - erp_stubs: [{file: ../../wiremock-d365/stubs/fo_post_service_unavailable.json}]
-  - sql: "UPDATE invoices SET status = 'disputed' WHERE invoice_no = 'INV-1002'"
-  - set: {expected_voucher: VCH-000001}
+  # Change the world mid-scenario: e.g. the provider recovers, or another user edits a row.
+  - mock_stubs: [{file: ../wiremock/stubs/payments/payments_charge_unavailable.json}]
+  - sql: "UPDATE customers SET blocked = true WHERE customer_no = 'C001'"
+  - set: {expected_charge_id: ch_000001}
 
 then:
   db:
-    receipts:
+    orders:
       # mode: exact (default) — these rows and no others (where-filtered); order-insensitive
       # mode: contains — these rows exist, others may too
       # mode: absent — no row matches any of these
-      where: "receipt_no = 'R-0102'"            # optional SQL filter
+      where: "order_no = 'ORD-0102'"            # optional SQL filter
       # order_by: id                            # makes the comparison ordered
       # count: 1                                # row count, with or without rows
       rows:
-        - {status: posted, unapplied_amount: 0, msd_voucher: "{{expected_voucher}}", posted_at: "{{iso_datetime}}"}
-    allocations: {count: 1}
-  db_unchanged: [customers, invoices]           # full-table before/after comparison (ignore_columns applied)
-  erp_requests:                                 # what the app sent to Dynamics
-    - {method: POST, url_path: /data/CustomerPaymentJournalLines, count: 1, json: {CreditAmount: 300, MarkedInvoice: INV-1002}}
-    - {url_path_pattern: "/postJournal$", count: 0}
-    # - {method: POST, url_path: /data/X, body_contains: "R-0102"}   # no count = at least one
-  erp_sequence: [POST /data/CustomerPaymentJournalHeaders, POST /data/CustomerPaymentJournalLines]
-  # erp_unmatched: allow                        # default 'none': any call no stub covers fails the scenario
+        - {status: paid, amount: 30, external_charge_id: "{{expected_charge_id}}", paid_at: "{{iso_datetime}}"}
+    payments: {count: 1}
+  db_unchanged: [customers]                     # full-table before/after comparison (ignore_columns applied)
+  mock_requests:                                # what the app sent to external systems
+    - {method: POST, url_path: /v1/charges, count: 1, json: {amount: 3000, currency: EUR, order_ref: ORD-0102}}
+    - {url_path_pattern: "^/v1/refunds", count: 0}
+    # - {method: POST, url_path: /v1/x, body_contains: "ORD-0102"}   # no count = at least one
+  mock_sequence: [POST /v1/customers, POST /v1/charges]
+  # mock_unmatched: allow                        # default 'none': any call no stub covers fails the scenario
 
 # Matchers usable anywhere an expected value goes:
 #   "{{any}}" "{{not_null}}" "{{uuid}}" "{{iso_datetime}}"
-#   "{{regex:^VCH-\\d+$}}" "{{contains:on hold}}" "{{gt:0}}" "{{lt:100.01}}"
+#   "{{regex:^ch_\\d+$}}" "{{contains:on hold}}" "{{gt:0}}" "{{lt:100.01}}"
 # Numbers compare as decimals (1000 == "1000.00"); timestamps compare as instants.

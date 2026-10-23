@@ -1,7 +1,7 @@
 # E2E stack: Postgres (same major version as production), WireMock standing in
-# for Entra ID + Dynamics 365, and the application under test.
+# for every external HTTP system (and its identity provider), and the app under test.
 # Place at <repo>/e2e/docker-compose.e2e.yml. Adapt every line marked ADAPT.
-name: ar-e2e
+name: app-e2e                       # ADAPT
 
 services:
   postgres:
@@ -25,7 +25,7 @@ services:
     image: wiremock/wiremock:3.13.1   # ADAPT: pin the current release; check hub.docker.com/r/wiremock/wiremock
     command: ["--disable-banner", "--port", "8080"]
     volumes:
-      - ./wiremock:/home/wiremock     # expects ./wiremock/mappings/*.json (defaults loaded on boot)
+      - ./wiremock:/home/wiremock     # loads ./wiremock/mappings/**/*.json (defaults) on boot
     ports: ["8080:8080"]
     healthcheck:
       test: ["CMD-SHELL", "curl -fs http://localhost:8080/__admin/health || wget -qO- http://localhost:8080/__admin/health || exit 1"]
@@ -36,12 +36,12 @@ services:
   app:
     build:
       context: ..                     # ADAPT: path to the application's Dockerfile context
-    environment:                      # ADAPT: the app's real config keys
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ar_e2e
-      MSD_BASE_URL: http://wiremock:8080
-      MSD_TOKEN_URL: http://wiremock:8080/tenant/oauth2/v2.0/token   # Entra authority, pointed at the fake
-      MSD_CLIENT_ID: e2e
-      MSD_CLIENT_SECRET: e2e
+    environment:                      # ADAPT: the app's real config keys (found in adoption Phase 0)
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/app_e2e
+      EXTERNAL_API_BASE_URL: http://wiremock:8080              # one per external system
+      EXTERNAL_API_TOKEN_URL: http://wiremock:8080/oauth2/token  # identity provider, pointed at the fake
+      EXTERNAL_API_CLIENT_ID: e2e
+      EXTERNAL_API_CLIENT_SECRET: e2e
       E2E_TEST_HOOKS: "1"             # enables /__test/* routes; the app must refuse this in production
       TZ: UTC
     ports: ["8000:8000"]

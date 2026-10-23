@@ -10,7 +10,8 @@ business (tolerance, write-off authority, allocation order), the row says
 *Policy* and names the question. Get the answer from the finance owner and write
 it into the scenario — never let the current code's behaviour become the
 expected value by default. Rows marked ✓ have a runnable example in
-`assets/example/scenarios/`.
+`example/scenarios/` in this pack. How such a catalogue is built for any domain:
+`references/case-catalogue-method.md`.
 
 ## Contents
 
@@ -106,7 +107,7 @@ expected value by default. Rows marked ✓ have a runnable example in
 
 ## 6. Posting to Dynamics
 
-The failure modes and their stubs are in `dynamics-mock.md` §5. Minimum set:
+The failure modes and their stubs are in `dynamics-mock.md` §4. Minimum set:
 
 | ID | Case | Expected |
 |---|---|---|

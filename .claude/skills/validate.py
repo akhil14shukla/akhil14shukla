@@ -24,6 +24,7 @@ CLAUDE_CODE_FIELDS = {
     "disallowed-tools", "paths", "context", "arguments",
 }
 DESCRIPTION_CAP = 1536  # description + when_to_use, per the skill listing
+ROUTE = r"(?:references|scripts|assets|use-cases)/[\w./-]*[\w/]"
 
 
 def parse_frontmatter(text: str) -> tuple[dict[str, str], str] | None:
@@ -81,7 +82,12 @@ def check(skills_dir: Path) -> list[str]:
         # Paths appear both inline in backticks and inside bash examples, so match
         # them bare. The trailing [\w/] stops a sentence's full stop being swallowed
         # into the path.
-        routed = set(re.findall(r"(?:references|scripts|assets)/[\w./-]*[\w/]", body))
+        routed = set(re.findall(ROUTE, body))
+        # A use-case pack is a second level of disclosure: the core routes to the
+        # pack's README, and that README routes the pack's own files.
+        for pack_readme in sorted(d.glob("use-cases/*/README.md")):
+            if pack_readme.relative_to(d).as_posix() in routed:
+                routed |= set(re.findall(ROUTE, pack_readme.read_text(encoding="utf-8")))
         for ref in sorted(routed):
             target = d / ref
             if ref.endswith("/"):

@@ -7,19 +7,20 @@
 
 Each scenario is a YAML file that states the whole truth of one business case:
 
-    given   the exact rows in Postgres and how the external ERP mock behaves
+    given   the exact rows in Postgres and how faked external systems behave
     when    the HTTP calls made against the running application
     then    the responses, the rows that must exist afterwards, the tables that
-            must not have changed, and the calls the ERP mock must have received
+            must not have changed, and the calls the external systems must have received
 
 The runner is language-agnostic: the application under test runs as its own
 process or container, pointed at the e2e database and at a WireMock server
-standing in for the ERP. Before every scenario the runner resets both, so each
+standing in for every external HTTP system it calls (ERP, payment provider, ...).
+Before every scenario the runner resets both, so each
 scenario starts from a state you wrote down and therefore knows the answer to.
 
     uv run scenario_runner.py --config e2e/e2e.config.yaml prepare
     uv run scenario_runner.py --config e2e/e2e.config.yaml run
-    uv run scenario_runner.py --config e2e/e2e.config.yaml run --filter AR-POST --junit out/junit.xml
+    uv run scenario_runner.py --config e2e/e2e.config.yaml run --filter ORD-PAY --junit out/junit.xml
     uv run scenario_runner.py --config e2e/e2e.config.yaml run --capture out/actual   # draft expectations
 
 Exit codes: 0 all passed, 1 a scenario failed, 2 configuration or environment error.
@@ -83,8 +84,8 @@ class Config:
         return self.raw["app"]
 
     @property
-    def erp(self) -> dict[str, Any] | None:
-        return self.raw.get("erp_mock")
+    def mock(self) -> dict[str, Any] | None:
+        return self.raw.get("mock")
 
     @property
     def snapshot(self) -> dict[str, Any]:
@@ -101,8 +102,8 @@ def load_config(path: Path) -> Config:
             raise ConfigError(f"{path}: missing top-level key {key!r}")
     raw["database"] = expand_env(raw["database"])
     raw["app"] = expand_env(raw["app"])
-    if raw.get("erp_mock"):
-        raw["erp_mock"] = expand_env(raw["erp_mock"])
+    if raw.get("mock"):
+        raw["mock"] = expand_env(raw["mock"])
     if raw["database"].get("reset", "truncate") not in ("truncate", "template"):
         raise ConfigError("database.reset must be 'truncate' or 'template'")
     return Config(root=path.parent.resolve(), raw=raw)
@@ -491,15 +492,15 @@ def diff_snapshots(before: dict[str, list[dict[str, Any]]], after: dict[str, lis
     return problems
 
 
-# --------------------------------------------------------------------------- erp mock
+# --------------------------------------------------------------------------- external http mock
 
 
-class ErpMock:
-    """WireMock admin API: reset, stub, and read the request journal."""
+class HttpMock:
+    """WireMock admin API for the faked external systems: reset, stub, read the request journal."""
 
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
-        self.url = cfg.erp["admin_url"].rstrip("/") if cfg.erp else None
+        self.url = cfg.mock["admin_url"].rstrip("/") if cfg.mock else None
 
     def _admin(self, method: str, path: str, body: Any = None) -> Response:
         assert self.url is not None
@@ -515,7 +516,7 @@ class ErpMock:
 
     def stub(self, mapping: dict[str, Any]) -> None:
         if not self.url:
-            raise ConfigError("scenario declares erp stubs but config has no erp_mock")
+            raise ConfigError("scenario declares mock_stubs but config has no mock section")
         self._admin("POST", "/mappings", mapping)
 
     def requests(self) -> list[dict[str, Any]]:
@@ -539,7 +540,7 @@ def load_stubs(items: list[Any], base: Path, variables: dict[str, Any]) -> list[
     return [render(s, variables) for s in stubs]
 
 
-def check_erp_calls(journal: list[dict[str, Any]], expectations: list[dict[str, Any]]) -> list[str]:
+def check_mock_calls(journal: list[dict[str, Any]], expectations: list[dict[str, Any]]) -> list[str]:
     problems = []
     for exp in expectations:
         hits = []
@@ -562,7 +563,7 @@ def check_erp_calls(journal: list[dict[str, Any]], expectations: list[dict[str, 
                 if match_value(exp["json"], body, "body"):
                     continue
             hits.append(req)
-        label = f"erp {exp.get('method', '*')} {exp.get('url_path') or exp.get('url_path_pattern', '*')}"
+        label = f"mock {exp.get('method', '*')} {exp.get('url_path') or exp.get('url_path_pattern', '*')}"
         if "count" in exp and len(hits) != exp["count"]:
             seen = [f"{e['request']['method']} {e['request']['url']} {e['request'].get('body', '')[:200]}" for e in journal]
             problems.append(f"{label}: expected {exp['count']} matching calls, got {len(hits)}. Journal: {seen}")
@@ -571,14 +572,14 @@ def check_erp_calls(journal: list[dict[str, Any]], expectations: list[dict[str, 
     return problems
 
 
-def check_erp_sequence(journal: list[dict[str, Any]], sequence: list[str]) -> list[str]:
+def check_mock_sequence(journal: list[dict[str, Any]], sequence: list[str]) -> list[str]:
     """`sequence` is a list of 'METHOD /path' that must appear in this relative order."""
     calls = [f"{e['request']['method']} {urllib.parse.urlparse(e['request']['url']).path}" for e in journal]
     pos = 0
     for call in calls:
         if pos < len(sequence) and fnmatch.fnmatch(call, sequence[pos]):
             pos += 1
-    return [] if pos == len(sequence) else [f"erp call order: expected subsequence {sequence}, got {calls}"]
+    return [] if pos == len(sequence) else [f"mock call order: expected subsequence {sequence}, got {calls}"]
 
 
 # --------------------------------------------------------------------------- scenarios
@@ -626,7 +627,7 @@ def selected(doc: dict[str, Any], filters: list[str], shard: tuple[int, int] | N
     return True
 
 
-def run_scenario(cfg: Config, erp: ErpMock, path: Path, doc: dict[str, Any], capture: Path | None) -> Result:
+def run_scenario(cfg: Config, mock: HttpMock, path: Path, doc: dict[str, Any], capture: Path | None) -> Result:
     result = Result(doc["id"], doc.get("title", ""), path)
     started = time.monotonic()
     base = path.parent
@@ -635,15 +636,15 @@ def run_scenario(cfg: Config, erp: ErpMock, path: Path, doc: dict[str, Any], cap
         variables["clock"] = canonical(doc["clock"])
     try:
         reset_database(cfg)
-        erp.reset()
+        mock.reset()
         given = doc.get("given") or {}
         with connect(cfg.db["dsn"]) as conn:
             for f in given.get("sql", []):
                 run_sql_file(conn, (base / f).resolve())
             for table, rows in (given.get("rows") or {}).items():
                 insert_rows(conn, table, render(rows, variables))
-        for stub in load_stubs(given.get("erp_stubs", []), base, variables):
-            erp.stub(stub)
+        for stub in load_stubs(given.get("mock_stubs", []), base, variables):
+            mock.stub(stub)
         if variables.get("clock") and (clock := cfg.app.get("clock")):
             resp = app_call(cfg, render(clock, variables))
             if resp.status >= 300:
@@ -654,7 +655,7 @@ def run_scenario(cfg: Config, erp: ErpMock, path: Path, doc: dict[str, Any], cap
             before = snapshot_tables(cfg, conn, then.get("db_unchanged", []))
 
         for i, step in enumerate(doc.get("when") or []):
-            run_step(cfg, erp, step, i, base, variables, result)
+            run_step(cfg, mock, step, i, base, variables, result)
             if result.failures and not step.get("continue_on_failure"):
                 break
 
@@ -663,15 +664,15 @@ def run_scenario(cfg: Config, erp: ErpMock, path: Path, doc: dict[str, Any], cap
                 for table, spec in (render(then.get("db") or {}, variables)).items():
                     result.failures += check_table(conn, table, spec)
                 result.failures += diff_snapshots(before, snapshot_tables(cfg, conn, list(before)))
-            journal = erp.requests()
-            result.failures += check_erp_calls(journal, render(then.get("erp_requests") or [], variables))
-            if then.get("erp_sequence"):
-                result.failures += check_erp_sequence(journal, then["erp_sequence"])
-            if then.get("erp_unmatched", "none") == "none" and (unmatched := erp.unmatched()):
+            journal = mock.requests()
+            result.failures += check_mock_calls(journal, render(then.get("mock_requests") or [], variables))
+            if then.get("mock_sequence"):
+                result.failures += check_mock_sequence(journal, then["mock_sequence"])
+            if then.get("mock_unmatched", "none") == "none" and (unmatched := mock.unmatched()):
                 calls = [f"{u['method']} {u['url']}" for u in unmatched]
-                result.failures.append(f"app called ERP endpoints no stub covers: {calls}")
+                result.failures.append(f"app called external endpoints no stub covers: {calls}")
         if capture:
-            write_capture(cfg, capture, doc["id"], erp)
+            write_capture(cfg, capture, doc["id"], mock)
     except ScenarioFailure as exc:
         result.failures.append(str(exc))
     except (ConfigError, psycopg.Error, OSError, KeyError, ValueError) as exc:
@@ -690,7 +691,7 @@ def app_call(cfg: Config, spec: dict[str, Any]) -> Response:
 
 
 def run_step(
-    cfg: Config, erp: ErpMock, step: dict[str, Any], i: int, base: Path, variables: dict[str, Any], result: Result
+    cfg: Config, mock: HttpMock, step: dict[str, Any], i: int, base: Path, variables: dict[str, Any], result: Result
 ) -> None:
     name = step.get("name", f"step {i + 1}")
     step = {k: v for k, v in step.items() if k != "name"}
@@ -723,26 +724,26 @@ def run_step(
     elif "sql" in step:
         with connect(cfg.db["dsn"]) as conn:
             conn.execute(render(step["sql"], variables))
-    elif "erp_stubs" in step:
-        for stub in load_stubs(step["erp_stubs"], base, variables):
-            erp.stub(stub)
+    elif "mock_stubs" in step:
+        for stub in load_stubs(step["mock_stubs"], base, variables):
+            mock.stub(stub)
     elif "set" in step:
         variables.update(render(step["set"], variables))
     else:
         raise ConfigError(f"{name}: unknown step type {sorted(step)}")
 
 
-def write_capture(cfg: Config, out: Path, scenario_id: str, erp: ErpMock) -> None:
+def write_capture(cfg: Config, out: Path, scenario_id: str, mock: HttpMock) -> None:
     """Dump post-run state as a draft `then` block. A human must review it before committing."""
     tables = list((cfg.snapshot.get("tables") or {}).keys())
     with connect(cfg.db["dsn"]) as conn:
         state = snapshot_tables(cfg, conn, tables)
     calls = [
         {"method": e["request"]["method"], "url_path": urllib.parse.urlparse(e["request"]["url"]).path, "body": e["request"].get("body")}
-        for e in erp.requests()
+        for e in mock.requests()
     ]
     out.mkdir(parents=True, exist_ok=True)
-    doc = {"db": {t: {"mode": "exact", "rows": rows} for t, rows in state.items()}, "erp_calls_observed": calls}
+    doc = {"db": {t: {"mode": "exact", "rows": rows} for t, rows in state.items()}, "mock_calls_observed": calls}
     (out / f"{scenario_id}.actual.yaml").write_text(
         yaml.safe_dump(json.loads(json.dumps(doc, default=str)), sort_keys=False, allow_unicode=True), encoding="utf-8"
     )
@@ -787,10 +788,10 @@ def run_all(cfg: Config, args: argparse.Namespace) -> int:
         print("no scenarios selected", file=sys.stderr)
         return 2
     wait_until_ready(cfg)
-    erp = ErpMock(cfg)
+    mock = HttpMock(cfg)
     results: list[Result] = []
     for path, doc in scenarios:
-        r = run_scenario(cfg, erp, path, doc, Path(args.capture) if args.capture else None)
+        r = run_scenario(cfg, mock, path, doc, Path(args.capture) if args.capture else None)
         results.append(r)
         mark = "PASS" if r.passed else ("ERROR" if r.error else "FAIL")
         print(f"[{mark}] {r.scenario_id} {r.title} ({r.seconds:.2f}s)")

@@ -9,7 +9,7 @@ given:
       - {id: 1, receipt_no: R-0101, customer_no: C001, currency: USD, amount: 1000, unapplied_amount: 0, reference: INV-1001, received_on: 2026-03-19, status: matched}
     allocations:
       - {receipt_id: 1, invoice_id: 1, amount: 1000}
-  # No erp_stubs: the default happy-path mappings WireMock loads on boot apply.
+  # No mock_stubs: the default happy-path mappings WireMock loads on boot apply.
 when:
   - request: {method: POST, path: /receipts/1/post}
     expect: {status: 200, json: {status: posted, journal: CPJ-000001, voucher: VCH-000001}}
@@ -18,7 +18,7 @@ then:
     receipts:
       rows: [{receipt_no: R-0101, status: posted, msd_journal: CPJ-000001, msd_voucher: VCH-000001, post_error: null, posted_at: "2026-03-20T09:00:00Z"}]
   db_unchanged: [invoices, allocations, customers]
-  erp_requests:
+  mock_requests:
     - {method: POST, url_path: /tenant/oauth2/v2.0/token, count: 1}
     - {method: POST, url_path: /data/CustomerPaymentJournalHeaders, count: 1, json: {dataAreaId: usmf, JournalName: CustPay}}
     - method: POST
@@ -26,7 +26,7 @@ then:
       count: 1
       json: {JournalBatchNumber: CPJ-000001, AccountDisplayValue: C001, MarkedInvoice: INV-1001, CreditAmount: 1000, CurrencyCode: USD, TransDate: "2026-03-20", PaymentReference: R-0101}
     - {method: POST, url_path: /api/services/ARIntegrationServices/ARPostingService/postJournal, count: 1, json: {_journalBatchNumber: CPJ-000001}}
-  erp_sequence:
+  mock_sequence:
     - POST /tenant/oauth2/v2.0/token
     - POST /data/CustomerPaymentJournalHeaders
     - POST /data/CustomerPaymentJournalLines

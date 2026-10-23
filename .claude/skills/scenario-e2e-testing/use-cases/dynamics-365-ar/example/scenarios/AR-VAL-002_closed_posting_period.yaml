@@ -15,5 +15,5 @@ when:
     expect: {status: 422, json: {error: posting period 2026-04 is closed}}
 then:
   db_unchanged: [receipts]
-  erp_requests:
+  mock_requests:
     - {url_path_pattern: ".*", count: 0}

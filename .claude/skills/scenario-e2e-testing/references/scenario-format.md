@@ -2,8 +2,9 @@
 
 Read this when writing, reviewing, or debugging a scenario file. The annotated
 template with every key is `assets/templates/scenario.template.yaml`; this file
-explains the semantics and the authoring rules. Seventeen real, passing examples
-live in `assets/example/scenarios/`.
+explains the semantics and the authoring rules. Snippets here use a neutral
+orders domain; for complete, runnable scenarios open a use-case pack's
+`example/scenarios/` (see `use-cases/README.md`).
 
 ## Contents
 
@@ -20,19 +21,19 @@ live in `assets/example/scenarios/`.
 ## 1. Anatomy
 
 ```yaml
-id: AR-POST-004
-title: Dynamics rejects a journal line; receipt is post_failed with the D365 message and the journal is never posted
-tags: [posting, msd, negative]
+id: ORD-PAY-004
+title: Payment provider declines the charge; order stays unpaid with the provider's reason and nothing is shipped
+tags: [payment, negative]
 clock: 2026-03-20T09:00:00Z
-given:   {sql: [...], rows: {...}, erp_stubs: [...]}
+given:   {sql: [...], rows: {...}, mock_stubs: [...]}
 when:    [ {request: ..., expect: ..., save: ...}, {wait_for: ...}, ... ]
-then:    {db: {...}, db_unchanged: [...], erp_requests: [...], erp_sequence: [...]}
+then:    {db: {...}, db_unchanged: [...], mock_requests: [...], mock_sequence: [...]}
 ```
 
-`id` is unique and permanent. Use `<SYSTEM>-<AREA>-<NNN>`: AR-RCPT (ingestion),
-AR-CUST (customer identification), AR-MATCH, AR-VAL (pre-posting validation),
-AR-POST, AR-REV (reversal/unapply), AR-SYNC (status back from Dynamics), AR-REG
-(regressions from incidents, tagged with the incident id).
+`id` is unique and permanent. Use `<SYSTEM>-<AREA>-<NNN>`, one AREA per stage of
+the business flow (intake, identification, processing, validation, sending to
+the external system, reversal, sync-back) plus `REG` for regressions from
+incidents, tagged with the incident id.
 
 ## 2. `given` — the starting state
 
@@ -42,14 +43,13 @@ Applied after the reset to "migrated + `base_seed`":
 |---|---|
 | `sql` | SQL files (relative to the scenario file), run in order. For row graphs many scenarios share. |
 | `rows` | `{table: [row, ...]}` inserted in the order written. Parents before children. `schema.table` works. Dicts/lists become `jsonb`. |
-| `erp_stubs` | WireMock mappings layered over the boot-time defaults: `{file: path}` (a mapping or `{"mappings": [...]}`) or `{inline: {...}}`. |
+| `mock_stubs` | WireMock mappings layered over the boot-time defaults: `{file: path}` (a mapping or `{"mappings": [...]}`) or `{inline: {...}}`. |
 | `clock` (top level) | Sent to the app's clock hook before `when`. Available as `{{clock}}`. |
 
 Rule of thumb: what the scenario is *about* goes inline in `rows`, so a reader
-sees it without opening another file; incidental context (the customer, two
-ordinary open invoices) comes from a fixture.
+sees it without opening another file; incidental context comes from a fixture.
 
-Explicit ids (`id: 1`) are fine and make `allocations` readable; the runner
+Explicit ids (`id: 1`) are fine and make child rows readable; the runner
 restarts sequences per scenario. Do not mix explicit ids with app-generated
 inserts on the same table in one scenario — the sequence does not know about
 your explicit id and the app's insert collides. Either let the app create the
@@ -64,7 +64,7 @@ row (and `save` its id) or insert it yourself.
 | `save` | `{var: $.json.path}` | Minimal JSONPath: `$.a.b[0].c`. |
 | `wait_for` | `sql`, `equals`, `timeout_s`, `interval_s` | Polls the first column of the first row. For async workers. |
 | `sql` | a SQL string | Change state mid-scenario: a concurrent user, a manual fix, a period closing. |
-| `erp_stubs` | list as in `given` | Change Dynamics behaviour mid-scenario: outage begins, outage ends. |
+| `mock_stubs` | list as in `given` | Change external behaviour mid-scenario: outage begins, outage ends. |
 | `set` | `{var: value}` | Name a literal for reuse in `then`. |
 
 A step may set `continue_on_failure: true` to keep going after its failure
@@ -72,12 +72,12 @@ A step may set `continue_on_failure: true` to keep going after its failure
 
 Typical multi-step shapes:
 
-- **Full flow**: create receipt → match → post. One scenario per end-to-end
-  happy path; edge cases start from the state just before the step under test.
-- **Retry after fix**: post (Dynamics rejects) → `erp_stubs` (Dynamics fixed)
-  → post again → assert exactly one posted journal and the error cleared.
-- **Idempotency**: post → post again → assert second call refused and the ERP
-  journal shows one posting.
+- **Full flow**: create → process → send. One scenario per end-to-end happy
+  path; edge cases start from the state just before the step under test.
+- **Retry after fix**: send (external system rejects) → `mock_stubs` (system
+  fixed) → send again → assert exactly one accepted call and the error cleared.
+- **Idempotency**: send → send again → assert the second is refused and the
+  journal shows one outbound call.
 
 ## 4. `then` — the expected end state
 
@@ -85,10 +85,10 @@ Typical multi-step shapes:
 
 ```yaml
 db:
-  receipts:
+  orders:
     mode: exact          # exact (default) | contains | absent
     where: "customer_no = 'C001'"
-    order_by: receipt_no # optional; makes comparison positional
+    order_by: order_no   # optional; makes comparison positional
     count: 2             # optional; with or without rows
     rows: [...]
 ```
@@ -105,28 +105,27 @@ db:
 ignoring `snapshot.ignore_columns`. This is the cheapest strong assertion in the
 suite: "validation failed, so *nothing* moved." Use it on every negative path.
 
-### `erp_requests`
+### `mock_requests`
 
 ```yaml
-erp_requests:
-  - {method: POST, url_path: /data/CustomerPaymentJournalLines, count: 1, json: {MarkedInvoice: INV-1001, CreditAmount: 1000}}
-  - {url_path_pattern: "/postJournal$", count: 0}
-  - {method: POST, url_path: /data/X, body_contains: "R-0102"}   # no count: at least one
+mock_requests:
+  - {method: POST, url_path: /v1/charges, count: 1, json: {amount: 1999, currency: EUR, order_ref: ORD-0042}}
+  - {url_path_pattern: "/v1/shipments", count: 0}
+  - {method: POST, url_path: /v1/refunds, body_contains: "ORD-0042"}   # no count: at least one
 ```
 
 Filters combine with AND: `method`, `url_path` (exact path, no query string),
 `url_path_pattern` (regex), `body_contains`, `json` (subset of the parsed body).
-`count` is exact. To say "the ERP was not called at all":
+`count` is exact. To say "no external system was called at all":
 `{url_path_pattern: ".*", count: 0}`.
 
-### `erp_sequence`
+### `mock_sequence`
 
-`["POST /data/CustomerPaymentJournalHeaders", "POST /api/services/*/postJournal"]`
-— these calls happened in this relative order (glob patterns; other calls may
-interleave). Use it where order is the rule: header before lines, lines before
-post, never post before all lines succeeded.
+`["POST /v1/customers", "POST /v1/charges", "POST /v1/*/capture"]` — these calls
+happened in this relative order (glob patterns; other calls may interleave).
+Use it where order is the rule: create before update, all parts before commit.
 
-### `erp_unmatched`
+### `mock_unmatched`
 
 Default `none`: if the app called a URL that no stub matched, the scenario
 fails and lists the calls. This catches new, untested integrations. Set
@@ -162,7 +161,7 @@ was possible is a weaker test.
 
 ## 6. Variables
 
-`{{name}}` is replaced in `given.rows`, `given.erp_stubs`, every step, and
+`{{name}}` is replaced in `given.rows`, `given.mock_stubs`, every step, and
 `then`. Built-ins: `scenario_id`, `clock`. Others come from `save` and `set`.
 A string that is exactly `"{{name}}"` becomes the raw value (an integer id stays
 an integer); inside a longer string it is interpolated as text (paths, SQL).
@@ -175,15 +174,13 @@ an integer); inside a longer string it is interpolated as text (paths, SQL).
    cannot state the right answer, you have found a requirements question — ask
    the business owner, do not let the code decide.
 3. **Every negative path asserts that nothing else happened**: `db_unchanged`
-   on the affected tables and `count: 0` on ERP calls that must not occur.
-4. **Every scenario that touches Dynamics asserts the payload** of the call that
-   matters (amount, account, invoice reference, date, currency, company) — not
-   just that a call happened.
-5. **Use realistic, boundary values**: an amount one cent inside and one cent
-   outside a tolerance; a date on the last day of a period and the first of the
-   next; `0.005` for rounding.
-6. **Copy real Dynamics error bodies** from production logs into stubs, so the
-   app's error parsing is tested against what D365 actually returns.
+   on the affected tables and `count: 0` on external calls that must not occur.
+4. **Every scenario that calls an external system asserts the payload** of the
+   call that matters — not just that a call happened.
+5. **Use boundary values**: one unit inside and one outside a limit; the last
+   day of a period and the first of the next.
+6. **Copy real error bodies** from production logs into stubs, so the app's
+   error parsing is tested against what the external system actually returns.
 7. **Regression scenarios cite their origin**: `tags: [regression, INC-2291]`
    and a comment with a one-line summary of what went wrong.
 8. **Keep scenarios small**: under ~60 lines. Long scenarios hide the rule.
@@ -191,27 +188,26 @@ an integer); inside a longer string it is interpolated as text (paths, SQL).
 ## 8. Reading a failure
 
 ```
-[FAIL] AR-MATCH-006 Receipt quoting two invoices ... pays the oldest-due invoice first (0.17s)
-       - db.invoices[0].open_amount: expected 0, got 150.00
-       - db.invoices[0].status: expected 'paid', got 'partially_paid'
+[FAIL] ORD-ALLOC-006 Partial stock is reserved from the oldest batch first (0.17s)
+       - db.stock_batches[0].reserved: expected 10, got 0
+       - db.stock_batches[1].reserved: expected 2, got 12
 ```
 
 The path says where: `step N` (a response), `db.<table>` (end state),
-`erp ...` (calls; the journal is printed), `db.<table> changed but must not`
-(a `db_unchanged` table moved; removed and added rows are printed). An `ERROR`
-(not `FAIL`) means the harness could not run the scenario — bad SQL in a
-fixture, WireMock unreachable, a foreign-key violation in `given` — and the
-message names it.
+`mock ...` (external calls; the journal is printed), `db.<table> changed but
+must not` (a `db_unchanged` table moved; removed and added rows are printed).
+An `ERROR` (not `FAIL`) means the harness could not run the scenario — bad SQL
+in a fixture, WireMock unreachable, a foreign-key violation in `given` — and the
+message names it. `[SKIP]` lines list quarantined scenarios and their reason.
 
 ## 9. Drafting expectations with `--capture`
 
 ```bash
-uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml run --filter AR-POST-007 --capture e2e/out/actual
+uv run e2e/scenario_runner.py --config e2e/e2e.config.yaml run --filter ORD-PAY-007 --capture e2e/out/actual
 ```
 
-writes `e2e/out/actual/AR-POST-007.actual.yaml`: every table in
-`snapshot.tables` and every ERP call observed. Use it to draft a `then` block
-for a new scenario or to see the full picture of a failure — then **cut it down
-to the columns the rule is about and check each value by hand**. Committing a
-capture unread turns the suite into a recording of current behaviour, bugs
-included.
+writes `e2e/out/actual/ORD-PAY-007.actual.yaml`: every table in
+`snapshot.tables` and every external call observed. Use it to draft a `then`
+block or to see the full picture of a failure — then **cut it down to the
+columns the rule is about and check each value by hand**. Committing a capture
+unread turns the suite into a recording of current behaviour, bugs included.

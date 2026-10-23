@@ -15,5 +15,5 @@ when:
     expect: {status: 422, json: {error: customer is on hold}}
 then:
   db_unchanged: [receipts, invoices, allocations]
-  erp_requests:
+  mock_requests:
     - {url_path_pattern: ".*", count: 0}

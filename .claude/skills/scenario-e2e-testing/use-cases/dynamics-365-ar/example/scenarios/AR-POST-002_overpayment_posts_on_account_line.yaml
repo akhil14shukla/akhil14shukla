@@ -13,7 +13,7 @@ when:
   - request: {method: POST, path: /receipts/1/post}
     expect: {status: 200, json: {status: posted}}
 then:
-  erp_requests:
+  mock_requests:
     - {method: POST, url_path: /data/CustomerPaymentJournalLines, count: 1, json: {MarkedInvoice: INV-1002, CreditAmount: 250}}
     - {method: POST, url_path: /data/CustomerPaymentJournalLines, count: 1, json: {MarkedInvoice: "", CreditAmount: 50}}
     - {method: POST, url_path: /data/CustomerPaymentJournalLines, count: 2}

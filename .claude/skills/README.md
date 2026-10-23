@@ -30,7 +30,7 @@ repeating them, so only what is relevant loads.
 | **perf-engineering** | Measure-first method, design-time performance, complexity, N+1 and I/O, caching, memory, cost | Something is slow, expensive, or memory-hungry; designing something whose speed matters |
 | **docs-craft** | README, CONTRIBUTING, CHANGELOG, docstrings, ADRs, `docs/` by Diátaxis mode | Writing documentation, or finishing something someone else will use |
 | **ship-quality** | Self-review, running the repo's gates, security sweep, Conventional Commits, PR description, honest reporting | Before committing, before a PR, "is this ready" |
-| **scenario-e2e-testing** | Known-state E2E: hand-written Postgres state in, real API calls, exact rows and ERP (Dynamics 365) calls out; WireMock fakes, runner, CI gate, AR case catalogue | Replacing manual regression testing, seeded-DB tests, mocking Dynamics, "run e2e on every PR" |
+| **scenario-e2e-testing** | Known-state E2E: hand-written Postgres state in, real API calls, exact rows and external calls out; WireMock fakes, runner, CI gate. Generic method plus use-case packs (Dynamics 365 accounts receivable) | Replacing manual regression testing, seeded-DB tests, mocking an external API or ERP, "run e2e on every PR" |
 
 A typical project touches four in sequence: `codebase-recon` or `repo-architect`
 to orient, `python-engineering` or `code-craft` to write, `testing-craft`
@@ -82,9 +82,16 @@ can invoke one directly: `/repo-architect`, `/python-engineering`, and so on.
 <skill>/
 ├── SKILL.md          standing rules + a routing table — loads on trigger
 ├── references/       task-shaped depth, loaded only when routed to
-├── assets/           templates to fill in (docs-craft)
-└── scripts/          executable, deterministic work
+├── assets/           templates to fill in (docs-craft, scenario-e2e-testing)
+├── scripts/          executable, deterministic work
+└── use-cases/        optional: system-specific packs, each routed from its own README
 ```
+
+A **use-case pack** (`scenario-e2e-testing/use-cases/<pack>/`) is a second level
+of disclosure for knowledge that applies to one kind of system only. The core
+routes to the pack's `README.md`, and that README routes the pack's files;
+`validate.py` follows that second hop, so a pack file nobody routes to is still
+reported. Generic material stays in `references/`.
 
 Every `SKILL.md` has the same shape, and the split between levels is deliberate:
 

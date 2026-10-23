@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4     # pin current majors; check each action's releases page
       - uses: astral-sh/setup-uv@v6
 
-      - name: Start Postgres and the Dynamics mock
+      - name: Start Postgres and the external-system mocks
         run: $COMPOSE up -d --wait postgres wiremock
 
       - name: Create and migrate the e2e database

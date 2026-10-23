@@ -9,7 +9,7 @@ given:
       - {id: 1, receipt_no: R-0104, customer_no: C001, currency: USD, amount: 1000, unapplied_amount: 0, received_on: 2026-03-19, status: matched}
     allocations:
       - {receipt_id: 1, invoice_id: 1, amount: 1000}
-  erp_stubs:
+  mock_stubs:
     - file: ../../wiremock-d365/stubs/fo_line_validation_error.json
 when:
   - request: {method: POST, path: /receipts/1/post}
@@ -19,6 +19,6 @@ then:
     receipts:
       rows: [{receipt_no: R-0104, status: post_failed, msd_voucher: null, post_error: "{{regex:^/data/CustomerPaymentJournalLines HTTP 400}}"}]
   db_unchanged: [invoices, allocations]
-  erp_requests:
+  mock_requests:
     - {method: POST, url_path: /data/CustomerPaymentJournalLines, count: 1}      # 4xx is not retried
     - {url_path_pattern: "/postJournal$", count: 0}
