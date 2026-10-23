@@ -6,6 +6,12 @@ data in Postgres. The pack assumes Dynamics 365 **Finance & Operations** (OData
 `/data/` entities plus a custom posting service) and notes where Business
 Central and Dataverse differ.
 
+**Use the whole pack only when the app is accounts receivable *and* posts to
+Dynamics 365.** For a Dynamics app in another domain, take only
+`dynamics-mock.md` and the token/auth stubs; for an AR app on another ERP, take
+only `ar-case-catalog.md`; otherwise leave this folder alone
+(`use-cases/README.md`, "Choosing").
+
 It adds to the generic method; it does not replace it. For each phase of
 `references/adoption-playbook.md`, read the matching section of this pack's
 `playbook.md`.

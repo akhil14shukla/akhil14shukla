@@ -37,8 +37,8 @@ could not run (bad config, app not ready, nothing selected).
 
 ## 2. Configuration reference
 
-Annotated template: `assets/templates/e2e.config.yaml` (a filled-in, working
-config is in each use-case pack's `example/`). `${VAR}` and
+Annotated template: `assets/templates/e2e.config.yaml` — start from this, not
+from a use-case pack's example config. `${VAR}` and
 `${VAR:-default}` are expanded from the environment so CI can override.
 
 | Key | Meaning |

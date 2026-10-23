@@ -3,8 +3,8 @@
 Read this when pointing the app at a fake for any external HTTP system (ERP,
 payment provider, CRM, tax service, bank API), writing its stubs, deciding which
 of its failure modes to cover, or keeping the fake honest against the real API.
-System-specific packs (e.g. Microsoft Dynamics 365) live under `use-cases/` and
-build on this file.
+This file is complete for any system; optional system-specific packs under
+`use-cases/` build on it when they match the app (`use-cases/README.md`).
 
 ## Contents
 

@@ -5,9 +5,12 @@ generic, step-by-step plan: what to look for in the codebase, what to build in
 what order, what to ask the humans, and how to know each phase is done. Each
 phase ends in a mergeable PR.
 
-If a use-case pack matches the app (see `use-cases/README.md`), read its
-`playbook.md` alongside this file: it adds the system-specific searches, stubs,
-cases and questions to each phase below.
+**Before Phase 0, decide which use-case pack applies — full, partial, or none —
+using the table in `use-cases/README.md`, and write the decision at the top of
+`e2e/README.md`.** With a full match, read the pack's `playbook.md` alongside
+this file; it adds system-specific searches, stubs, cases and questions to each
+phase. With no match, this file and the other generic references are the whole
+method.
 
 ## Contents
 
@@ -107,7 +110,7 @@ calls), and its `mock_requests` pin every field with business meaning.
 ## Phase 4 — The scenario catalogue
 
 1. Build the list with `case-catalogue-method.md` (sources, lenses, priority) —
-   or start from the matching use-case pack's catalogue — plus every manual
+   or, only with a full or domain match, from the pack's catalogue — plus every manual
    test case and incident from Phase 0. Keep it as a table in `e2e/README.md`.
 2. For each case, before writing YAML: **state the expected outcome in one
    sentence**. Cases where you cannot are *Policy* questions — collect them, ask
@@ -154,8 +157,8 @@ Generic mutation classes to try on the flow under test:
 | Trusting a bad success | mark done when the response lacks the external id |
 
 Every mutation that survives is a missing scenario: write it and re-run the
-mutation. (On the bundled Dynamics AR example, reversing the allocation order
-survived the first 16 scenarios; one scenario was added because of it.)
+mutation. Expect survivors: a first suite usually misses at least one
+ordering or boundary rule that only a mutation reveals.
 
 **Keeping it alive**:
 

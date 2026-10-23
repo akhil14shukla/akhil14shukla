@@ -3,8 +3,9 @@
 Read this when deciding *which* scenarios to write for an application — before
 the first batch, or when auditing a suite for gaps. It is a method, not a list:
 apply it to the domain, and record the result as a catalogue table in
-`e2e/README.md`. For a finished example of its output, see the accounts
-receivable catalogue in `use-cases/dynamics-365-ar/ar-case-catalog.md`.
+`e2e/README.md`. The method produces the catalogue; do not start from another
+domain's list. (If a use-case pack's domain matches the app, its catalogue is a
+valid starting point — see `use-cases/README.md`.)
 
 ## Contents
 

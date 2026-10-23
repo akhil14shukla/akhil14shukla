@@ -18,9 +18,15 @@ own migrations) and WireMock impersonating its external HTTP systems and their
 identity provider. A runner resets everything before each scenario, so
 scenarios are independent and run in any order, on any shard, on every PR.
 
-The method is generic (`references/`, `assets/templates/`, `scripts/`).
-System- and domain-specific knowledge lives in **use-case packs** under
-`use-cases/`; check `use-cases/README.md` for one that matches the app.
+The method is generic (`references/`, `assets/templates/`, `scripts/`) and is
+complete on its own. System- and domain-specific knowledge lives in optional
+**use-case packs** under `use-cases/`.
+
+**Choose the pack before anything else, and record the choice** in the target
+repo's `e2e/README.md`. A pack applies only when the app matches *both* its
+external system and its domain (`use-cases/README.md` has the table). With no
+match, use only the generic files: do not copy a pack's stubs, cases, scenario
+ids, table names, or example code — they encode another domain's rules.
 
 ## The standing rules
 

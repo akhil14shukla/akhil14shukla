@@ -8,9 +8,25 @@ the same phase.
 
 ## Packs
 
-| Pack | For | Entry point |
-|---|---|---|
-| `dynamics-365-ar` | Accounts receivable / cash application: receipts matched to invoices, validated, and posted to Microsoft Dynamics 365 (Finance & Operations; notes for Business Central and Dataverse), data in Postgres | `use-cases/dynamics-365-ar/README.md` |
+| Pack | External system | Domain | Entry point |
+|---|---|---|---|
+| `dynamics-365-ar` | Microsoft Dynamics 365 (Finance & Operations; notes for Business Central and Dataverse) + Entra ID | Accounts receivable / cash application: receipts matched to invoices, validated, posted | `use-cases/dynamics-365-ar/README.md` |
+
+## Choosing: full match, partial match, or none
+
+Decide once, at the start, and write the decision into the target repo's
+`e2e/README.md` so later sessions do not re-decide it.
+
+| The app matches the pack's… | Use |
+|---|---|
+| External system **and** domain | The whole pack, on top of the generic files |
+| External system only (e.g. Dynamics 365, but sales orders or procurement) | Generic files + the pack's system file (`dynamics-mock.md`) and the token/auth stubs. Not its domain catalogue, domain stubs, or example. |
+| Domain only (e.g. accounts receivable, but posting to SAP or NetSuite) | Generic files + the pack's domain catalogue (`ar-case-catalog.md`), re-checked against the app's policies. Not its system file, stubs, or example. |
+| Neither | Generic files only. Ignore `use-cases/` entirely. |
+
+When unsure, treat it as no match: the generic method is complete without any
+pack, while borrowing from the wrong pack plants another domain's assumptions
+(entity names, payload fields, business rules) in the new suite.
 
 ## Anatomy of a pack
 

@@ -2,9 +2,10 @@
 
 Read this when writing, reviewing, or debugging a scenario file. The annotated
 template with every key is `assets/templates/scenario.template.yaml`; this file
-explains the semantics and the authoring rules. Snippets here use a neutral
-orders domain; for complete, runnable scenarios open a use-case pack's
-`example/scenarios/` (see `use-cases/README.md`).
+explains the semantics and the authoring rules. Snippets here use a neutral,
+illustrative orders domain — replace names with the app's own. Runnable
+scenarios exist only inside use-case packs; look at them only if a pack applies
+to this app (`use-cases/README.md`).
 
 ## Contents
 
